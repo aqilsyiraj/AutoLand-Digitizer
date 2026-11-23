@@ -96,6 +96,7 @@ class DigitizationPage(QWidget):
         self.polyline_normalized: list = []
         self.detection_meta: dict = {}
         self.crop_box: tuple = ()
+        self.crop_confirmed_by_user = False
         self.crop_path: str = ""
         self.processing = False
 
@@ -169,6 +170,7 @@ class DigitizationPage(QWidget):
                 [
                     "Halaman <b>Gambar Situasi</b> dipilih otomatis; Anda bisa menggantinya.",
                     "Polyline batas langsung <b>terdeteksi otomatis</b> dan digambar hijau di atas denah.",
+                    "Tarik kotak pada denah lalu klik <b>Konfirmasi Potongan</b> agar hanya area itu yang dimasukkan ke AutoCAD.",
                     "Geser titik hijau untuk koreksi. Klik 2x pada garis untuk menambah titik, klik kanan titik untuk menghapus.",
                 ],
             )
@@ -203,10 +205,24 @@ class DigitizationPage(QWidget):
             "Titik Manual",
             size="sm",
             tone="primary",
-            tooltip="Gambar polyline tangan bebas jika auto-detect gagal (0 kandidat)",
+            tooltip="Gambar polyline tangan bebas (aktif kapan saja, tanpa menunggu auto-detect)",
         )
         self.btn_manual_draw.clicked.connect(self._start_manual_draw)
         p.addWidget(self.btn_manual_draw)
+
+        self.btn_set_crop = Button(
+            "Area Potongan",
+            size="sm",
+            tone="secondary",
+            tooltip="Tarik kotak pada denah untuk menentukan area yang dimasukkan ke AutoCAD, lalu klik 'Konfirmasi Potongan'",
+        )
+        self.btn_set_crop.clicked.connect(self._prompt_crop_selection)
+        p.addWidget(self.btn_set_crop)
+
+        self.lbl_crop_area = QLabel("Area potongan: penuh halaman")
+        self.lbl_crop_area.setObjectName("DetectionInfo")
+        self.lbl_crop_area.setWordWrap(True)
+        p.addWidget(self.lbl_crop_area)
 
         self.combo_candidate = QComboBox()
         self.combo_candidate.currentIndexChanged.connect(self._on_candidate_changed)
@@ -242,6 +258,7 @@ class DigitizationPage(QWidget):
         self.canvas.confirmed.connect(self._on_manual_crop_confirmed)
         self.canvas.polyline_changed.connect(self._on_polyline_edited)
         self.canvas.polyline_manual_finished.connect(self._on_manual_polyline_finished)
+        self.canvas.manual_draw_cancelled.connect(self._on_manual_draw_cancelled)
         content.addWidget(self.canvas, 1)
 
         layout.addLayout(content, 1)
@@ -548,6 +565,67 @@ class DigitizationPage(QWidget):
         self._tone(self.lbl_detection_status, tone)
 
     # =================================================================
+    # AREA POTONGAN (raster yang dimasukkan ke AutoCAD)
+    # =================================================================
+    def _crop_area_text(self) -> str:
+        box = self.crop_box
+        if len(box) != 4:
+            return "penuh halaman"
+        width = max(0.0, float(box[2]) - float(box[0]))
+        height = max(0.0, float(box[3]) - float(box[1]))
+        if width >= 0.999 and height >= 0.999:
+            return "penuh halaman"
+        return f"{width * 100:.0f}% × {height * 100:.0f}% halaman"
+
+    def _update_crop_area_label(self):
+        self.lbl_crop_area.setText(f"Area potongan: {self._crop_area_text()}")
+
+    def _prompt_crop_selection(self):
+        """Arahkan operator menarik kotak area yang akan dimasukkan ke AutoCAD."""
+        if not self.canvas.has_image():
+            QMessageBox.information(
+                self, "Halaman Belum Dimuat",
+                "Tunggu hingga gambar denah tampil, lalu tentukan area potongan.",
+            )
+            return
+        if self.canvas.draw_mode:
+            self._finish_manual_draw()
+        self.canvas.reset_crop()
+        self._set_detection_status(
+            "Tarik kotak pada denah, lalu klik 'Konfirmasi Potongan'.", "info"
+        )
+        self.lbl_detection_info.setText(
+            "Area Potongan: tarik kotak pada denah untuk membatasi area.\n"
+            "Hanya area di dalam kotak yang dimasukkan ke AutoCAD."
+        )
+        self.canvas.info_label.setText(
+            "Tarik kotak pada denah, lalu klik 'Konfirmasi Potongan'."
+        )
+
+    @staticmethod
+    def _crop_box_from_points(points: list, padding_ratio: float = 0.06) -> tuple:
+        """Kotak ternormalisasi di sekitar polyline (bukan seluruh halaman)."""
+        xs = [float(p[0]) for p in points]
+        ys = [float(p[1]) for p in points]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        pad_x = max(0.02, (max_x - min_x) * padding_ratio)
+        pad_y = max(0.02, (max_y - min_y) * padding_ratio)
+        clamp = lambda v: max(0.0, min(1.0, v))
+        return (
+            round(clamp(min_x - pad_x), 6),
+            round(clamp(min_y - pad_y), 6),
+            round(clamp(max_x + pad_x), 6),
+            round(clamp(max_y + pad_y), 6),
+        )
+
+    def _resolve_manual_crop_box(self, points: list) -> tuple:
+        """Area potongan untuk polyline manual: pakai area terkonfirmasi bila ada."""
+        if self.crop_confirmed_by_user and len(self.crop_box) == 4:
+            return tuple(float(v) for v in self.crop_box)
+        return self._crop_box_from_points(points)
+
+    # =================================================================
     # NAVIGASI & STATE
     # =================================================================
     def _set_step_enabled(self, step: int):
@@ -574,6 +652,7 @@ class DigitizationPage(QWidget):
         self.polyline_normalized = []
         self.detection_meta = {}
         self.crop_box = ()
+        self.crop_confirmed_by_user = False
         self.crop_path = ""
         self.processing = False
         self.canvas.clear_polyline()
@@ -581,8 +660,11 @@ class DigitizationPage(QWidget):
         self.progress.setValue(0)
         self._set_detection_status("Menunggu PDF dibuka…")
         self.lbl_detection_info.setText("Belum ada polyline.")
+        self._update_crop_area_label()
         self.combo_candidate.clear()
         self.btn_use_polyline.setEnabled(False)
+        self.btn_manual_draw.setEnabled(True)
+        self.btn_detect_again.setEnabled(True)
 
     def load_document(self, doc_id: int):
         self._reset_state()
@@ -669,11 +751,17 @@ class DigitizationPage(QWidget):
     def _on_page_changed(self, _index: int):
         if not self.doc_id:
             return
+        # Area potongan terikat pada halaman; mulai bersih saat halaman diganti.
+        self.crop_box = ()
+        self.crop_confirmed_by_user = False
+        self._update_crop_area_label()
         page = self.combo_page.currentData()
         if page:
             self._detect_page(int(page))
 
     def _redetect_current_page(self):
+        if not self.doc_id:
+            return
         page = self.combo_page.currentData()
         if page:
             self._detect_page(int(page))
@@ -768,6 +856,9 @@ class DigitizationPage(QWidget):
             )
             self.btn_use_polyline.setEnabled(False)
             self.canvas.clear_polyline()
+            if not self.crop_confirmed_by_user:
+                self.crop_box = ()
+                self._update_crop_area_label()
             self._update_detection_info()
 
     def _show_candidate(self, index: int):
@@ -778,6 +869,7 @@ class DigitizationPage(QWidget):
         self.polyline_normalized = [tuple(p) for p in cand.get("vertices_normalized", [])]
         self.crop_box = tuple(cand.get("crop_box_normalized") or ())
         self.canvas.show_polyline(self.polyline_normalized)
+        self._update_crop_area_label()
         self._update_detection_info()
 
     def _on_candidate_changed(self, _index: int):
@@ -805,24 +897,53 @@ class DigitizationPage(QWidget):
         self.lbl_detection_info.setText(
             f"Polyline siap: <b>{n} titik</b>\n"
             f"Keyakinan deteksi: <b>{conf:.0f}%</b>\n"
-            f"Luas citra: <b>{area:,.0f} px²</b>\n\n"
+            f"Luas citra: <b>{area:,.0f} px²</b>\n"
+            f"Area masuk DWG: <b>{self._crop_area_text()}</b>\n\n"
             "Geser titik hijau bila perlu, lalu klik 'Gunakan Polyline Ini'."
         )
 
     def _on_manual_crop_confirmed(self, norm_box: tuple):
-        """Fallback: operator menentukan area denah dengan mouse, lalu sistem mendeteksi di dalamnya."""
+        """
+        Operator menentukan area potongan dengan mouse.
+        Area ini yang dipakai sebagai raster di AutoCAD; deteksi otomatis hanya
+        dijalankan bila belum ada polyline manual.
+        """
+        if len(norm_box) != 4:
+            return
+        norm_box = tuple(float(v) for v in norm_box)
+        self.crop_box = norm_box
+        self.crop_confirmed_by_user = True
+        self._update_crop_area_label()
+
+        # Polyline manual yang sudah ada tidak boleh hilang; cukup perbarui areanya.
+        manual_cands = [c for c in self.candidates if c.get("method") == "manual-draw"]
+        if manual_cands:
+            for cand in manual_cands:
+                cand["crop_box_normalized"] = list(norm_box)
+            self._set_detection_status(
+                "Area potongan diperbarui. Polyline manual tetap dipakai.", "ok"
+            )
+            self._update_detection_info()
+            return
+
         pdf_path = self.doc_data.get("path_pdf", "")
         page = self.combo_page.currentData() or 1
+        if not pdf_path or not os.path.exists(pdf_path):
+            self._set_detection_status("Area potongan disimpan.", "ok")
+            return
+
         name = f"manual_{uuid.uuid4().hex[:8]}.png"
         ok, path = crop_pdf_region_to_file(pdf_path, int(page), norm_box, name, dpi=DETECTION_DPI)
         if not ok:
-            QMessageBox.critical(self, "Gagal Memotong", path)
+            self._set_detection_status("Area potongan disimpan.", "ok")
+            QMessageBox.warning(self, "Gagal Memotong", path)
             return
         try:
             image = Image.open(path).convert("RGB")
             array = np.asarray(image)
         except Exception as exc:
-            QMessageBox.critical(self, "Gagal Membaca Gambar", str(exc))
+            self._set_detection_status("Area potongan disimpan.", "ok")
+            QMessageBox.warning(self, "Gagal Membaca Gambar", str(exc))
             return
 
         result = detect_polylines_from_array(array)
@@ -838,9 +959,13 @@ class DigitizationPage(QWidget):
             cands.append(new_cand)
 
         if not cands:
-            QMessageBox.warning(
-                self, "Deteksi Gagal",
-                "Polyline tidak ditemukan pada area yang dipilih. Coba area lain atau halaman lain."
+            self._set_detection_status(
+                "Area potongan disimpan. Deteksi otomatis gagal; gunakan Titik Manual.", "warn"
+            )
+            QMessageBox.information(
+                self, "Deteksi Otomatis Gagal",
+                "Polyline tidak ditemukan pada area ini, tetapi area potongan sudah disimpan.\n"
+                "Klik 'Titik Manual' untuk menggambar batas tanah secara manual."
             )
             return
 
@@ -880,126 +1005,110 @@ class DigitizationPage(QWidget):
         self.lbl_review_summary.setText(
             f"Polyline disetujui: <b>{len(self.polyline_normalized)} titik</b> • "
             f"keyakinan <b>{float(cand.get('confidence', 0)) * 100:.0f}%</b> • "
-            f"halaman <b>{self.detection_meta.get('page', '-')}</b>. "
+            f"halaman <b>{self.detection_meta.get('page', '-')}</b>.<br>"
+            f"Area yang masuk ke DWG: <b>{self._crop_area_text()}</b>. "
             "Geser titik di Langkah 1 bila perlu koreksi."
         )
         self._go_to_step(1)
 
     # =================================================================
-    # TITI MANUAL (draw polyline bebas)
-    # =================================================================
-    def _on_manual_polyline_finished(self, normalized_points: list):
-        """
-        Dipanggil saat user selesai menarik polyline manual (double-click di canvas).
-        normalisasi_points adalah list of (x, y) dalam rentang 0..1.
-        """
-        if len(normalized_points) < 3:
-            QMessageBox.warning(self, "Polyline Tidak Valid", "Minimal tiga titik diperlukan untuk membentuk polyline.")
-            return
-
-        # Simpan polyline manual ke dalam variabel internal
-        self.polyline_normalized = normalized_points
-        # Buat kandidat satu-satu agar bisa diproses seperti hasil auto-detect
-        self.candidates = [{
-            "vertices_normalized": [list(p) for p in normalized_points],
-            "crop_box_normalized": (0.0, 0.0, 1.0, 1.0),
-            "confidence": 0.30,  # keyakinan rendah karena manual, tapi valid
-            "vertex_count": len(normalized_points),
-            "method": "manual-draw",
-        }]
-        self.combo_candidate.blockSignals(True)
-        self.combo_candidate.clear()
-        self.combo_candidate.addItem("Polyline Manual (diklik)", 0)
-        self.combo_candidate.blockSignals(False)
-        self.selected_index = 0
-
-        # Update status & ringkasan seperti biasa
-        cand = self.candidates[self.selected_index]
-        self.lbl_review_summary.setText(
-            f"Polyline manual disetujui: <b>{len(self.polyline_normalized)} titik</b> • "
-            f"keyakinan <b>~30%</b> • "
-            "Dilakukan secara manual (tidak ada auto-detect)."
-        )
-        self.btn_use_polyline.setEnabled(True)
-        self._go_to_step(1)
-
-    # =================================================================
-    # METODE: Memulai mode titik manual di canvas
+    # TITIK MANUAL (draw polyline bebas)
     # =================================================================
     def _start_manual_draw(self):
-        """Aktifkan mode titik manual di canvas CropInteractiveWidget."""
-        # Nonaktifkan tombol detect sementara agar fokus pada drawing
+        """Aktifkan mode titik manual di canvas. Bisa dipakai kapan saja."""
+        if not self.doc_id:
+            QMessageBox.information(
+                self, "Belum Ada Dokumen",
+                "Buka dokumen dari menu Antrean terlebih dahulu.",
+            )
+            return
+        if not self.canvas.has_image():
+            QMessageBox.information(
+                self, "Halaman Belum Dimuat",
+                "Pratinjau halaman denah belum siap. Tunggu hingga gambar denah tampil, lalu coba lagi.",
+            )
+            return
+
         self.btn_detect_again.setEnabled(False)
-        # Aktifkan mode di canvas
-        self.canvas.draw_mode = True
-        self.canvas.manual_points = []
-        # Reset info label
-        self.lbl_detection_info.setText("Titik Manual: klik-titik di denah. Double-click untuk menyegel polyline.")
+        self.btn_manual_draw.setEnabled(False)
+        self.canvas.start_manual_draw()
+        self._set_detection_status(
+            "Mode Titik Manual aktif. Klik pada denah, klik 2x untuk menyegel.", "info"
+        )
+        self.lbl_detection_info.setText(
+            "Titik Manual: klik pada denah untuk menambah titik.\n"
+            "Klik 2x untuk menyegel polyline • Esc untuk membatalkan.\n\n"
+            + (
+                "Area masuk AutoCAD: area yang Anda konfirmasi."
+                if self.crop_confirmed_by_user
+                else "Area masuk AutoCAD: otomatis mengikuti batas polyline."
+            )
+        )
         self.status_badge.set_status("MANUAL DRAW")
-        # Pastikan canvas refresh
-        self.canvas.update()
 
     def _finish_manual_draw(self):
-        """Panggil ketika user double-click selesai di canvas."""
-        self.canvas.draw_mode = False
+        """Kembalikan kontrol UI setelah mode manual selesai/dibatalkan."""
+        self.canvas.cancel_manual_draw()
         self.btn_detect_again.setEnabled(True)
-        # Kirim polyline manual ke handler
-        self.canvas.finish_manual_polyline()
-        # Kembalikan status
-        self.status_badge.set_status("MENUNGGU")
-        self.lbl_detection_info.setText("Belum ada polyline.\nGeser titik hijau setelah deteksi selesai.")
+        self.btn_manual_draw.setEnabled(True)
 
-    def _redetect_current_page(self):
-        if not self.doc_id:
-            return
-        page = self.combo_page.currentData()
-        if page:
-            self._detect_page(int(page))
-
-    # ---- handler sinal dari canvas manual finished ----
     def _on_manual_polyline_finished(self, normalized_points: list):
-        """
-        Dipanggil saat user double-click di canvas saat draw_mode aktif.
-        normalisasi_points adalah list of (x, y) dalam rentang 0..1.
-        """
-        # Nonaktifkan mode draw dan tombol
+        """Dipanggil canvas saat polyline manual disegel (double-click)."""
         self._finish_manual_draw()
-
-        # Lanjut proses seperti kandidat biasa
         self._process_manual_candidate(normalized_points)
 
+    def _on_manual_draw_cancelled(self):
+        """Pulihkan kontrol UI saat mode manual dibatalkan (Esc)."""
+        self.btn_detect_again.setEnabled(True)
+        self.btn_manual_draw.setEnabled(True)
+        self.status_badge.set_status(self.doc_data.get("status") or "MENUNGGU")
+        self._set_detection_status("Mode Titik Manual dibatalkan.", "neutral")
+        self._update_detection_info()
+
     def _process_manual_candidate(self, normalized_points: list):
-        """Proses kandidat hasil manual draw ke alur langkah selanjutnya."""
-        if len(normalized_points) < 3:
+        """Tambahkan polyline manual sebagai kandidat dan lanjut ke Langkah 2."""
+        points = [tuple(p) for p in normalized_points]
+        if len(points) < 3:
             QMessageBox.warning(self, "Polyline Tidak Valid", "Minimal tiga titik diperlukan.")
+            self.status_badge.set_status(self.doc_data.get("status") or "MENUNGGU")
             return
 
-        # Simpan polyline manual
-        self.polyline_normalized = normalized_points
-        # Buat kandidat satu-satu
-        self.candidates = [{
-            "vertices_normalized": [list(p) for p in normalized_points],
-            "crop_box_normalized": (0.0, 0.0, 1.0, 1.0),
-            "confidence": 0.30,
-            "vertex_count": len(normalized_points),
-            "method": "manual-draw",
-        }]
-        self.combo_candidate.blockSignals(True)
-        self.combo_candidate.clear()
-        self.combo_candidate.addItem("Polyline Manual (diklik)", 0)
-        self.combo_candidate.blockSignals(False)
-        self.selected_index = 0
+        self.polyline_normalized = points
+        self.crop_box = self._resolve_manual_crop_box(points)
+        self._update_crop_area_label()
 
-        # Update UI
-        cand = self.candidates[self.selected_index]
-        self.lbl_review_summary.setText(
-            f"Polyline manual disetujui: <b>{len(self.polyline_normalized)} titik</b> • "
-            f"keyakinan <b>~30%</b> • "
-            "Dilakukan secara manual (tidak ada auto-detect)."
+        # Tambahkan sebagai kandidat baru tanpa menghapus hasil auto-detect.
+        manual_index = len(self.candidates)
+        self.candidates.append({
+            "vertices_normalized": [list(p) for p in points],
+            "crop_box_normalized": list(self.crop_box),
+            "confidence": 0.30,
+            "vertex_count": len(points),
+            "method": "manual-draw",
+        })
+        self.selected_index = manual_index
+
+        self.combo_candidate.blockSignals(True)
+        self.combo_candidate.addItem(
+            f"Polyline Manual • {len(points)} titik (digambar operator)", manual_index
         )
+        self.combo_candidate.setCurrentIndex(self.combo_candidate.count() - 1)
+        self.combo_candidate.blockSignals(False)
+
+        self.canvas.show_polyline(self.polyline_normalized)
         self.btn_use_polyline.setEnabled(True)
+        self._set_detection_status("Polyline manual siap digunakan.", "ok")
+        self._update_detection_info()
+
+        self.lbl_review_summary.setText(
+            f"Polyline manual disetujui: <b>{len(points)} titik</b> • "
+            "keyakinan <b>~30%</b> • digambar manual oleh operator.<br>"
+            f"Area yang masuk ke DWG: <b>{self._crop_area_text()}</b>."
+        )
+        self.status_badge.set_status(self.doc_data.get("status") or "MENUNGGU")
         self._go_to_step(1)
-    # =================================================================
+
+
     def _update_identity_preview(self):
         kode = self.combo_hak.currentData()
         no_hak = self.input_no_hak.text().strip()

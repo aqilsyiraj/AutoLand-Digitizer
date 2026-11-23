@@ -19,6 +19,7 @@ class CropInteractiveWidget(QWidget):
     crop_changed = Signal(bool)                   # emit True jika ada area terseleksi
     polyline_changed = Signal(list)               # emit daftar titik ternormalisasi setelah diedit
     polyline_manual_finished = Signal(list)       # emit daftar titik ternormalisasi hasil manual drawing
+    manual_draw_cancelled = Signal()              # emit saat mode manual dibatalkan (Esc)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -38,8 +39,10 @@ class CropInteractiveWidget(QWidget):
         # --- Mode Titik Manual Baru ---
         self.draw_mode = False               # sedang menggambar polyline manual?
         self.manual_points: list[QPointF] = []  # titik yang diklik saat draw mode
+        self._hover_point: Optional[QPointF] = None  # posisi kursor untuk garis pratinjau
         self.setMouseTracking(True)
         self.setCursor(Qt.CrossCursor)
+        self.setFocusPolicy(Qt.StrongFocus)
 
     def set_image_bytes(self, image_bytes: bytes):
         """Memuat gambar halaman PDF dari bytes (PNG)."""
@@ -64,7 +67,27 @@ class CropInteractiveWidget(QWidget):
         """Mengembalikan polyline saat ini sebagai daftar (x, y) ternormalisasi."""
         return [(round(float(p.x()), 6), round(float(p.y()), 6)) for p in self.polyline]
 
-    def finish_manual_polyline(self):
+    def set_draw_mode(self, enabled: bool):
+        """Mengaktifkan/menonaktifkan mode gambar polyline manual."""
+        self.draw_mode = bool(enabled)
+        self._hover_point = None
+        if self.draw_mode:
+            self.manual_points = []
+            self.setCursor(Qt.CrossCursor)
+            self.setFocus(Qt.MouseFocusReason)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+        self.update()
+
+    def cancel_manual_draw(self):
+        """Batalkan gambar manual tanpa mengirim polyline."""
+        was_active = self.draw_mode
+        self.manual_points = []
+        self.set_draw_mode(False)
+        if was_active:
+            self.manual_draw_cancelled.emit()
+
+    def finish_manual_polyline(self) -> bool:
         """
         Akhiri mode titik manual: konversi titik ke koordinat ternormalisasi
         dan emit melalui sinyal polyline_manual_finished.
@@ -73,21 +96,28 @@ class CropInteractiveWidget(QWidget):
         # Konversi titik ke range 0..1 berdasarkan ukuran canvas saat ini
         w = max(1.0, float(self.width()))
         h = max(1.0, float(self.height()))
-        normalized = [(round(float(p.x()) / w, 6), round(float(p.y()) / h, 6)) for p in self.manual_points]
-        if len(normalized) >= 3:
-            self.polyline_manual_finished.emit(normalized)
-        # Reset state
+        normalized = [
+            (
+                round(max(0.0, min(1.0, float(p.x()))), 6),
+                round(max(0.0, min(1.0, float(p.y()))), 6),
+            )
+            for p in self.manual_points
+        ]
+        valid = len(normalized) >= 3
+        # Reset state lebih dulu agar tidak menggambar sisa titik
         self.manual_points = []
-        self.draw_mode = False
-        self.update_canvas_size()
-        self.update()
+        self._hover_point = None
+        self.set_draw_mode(False)
+        if valid:
+            self.polyline_manual_finished.emit(normalized)
+        return valid
 
     def clear_polyline(self):
         self.polyline = []
         self.polyline_editable = False
         self.manual_points = []
-        self.draw_mode = False
-        self.update()
+        self._hover_point = None
+        self.set_draw_mode(False)
 
     def _nearest_vertex(self, position: QPointF, tolerance: float = 14.0) -> int:
         if not self.polyline:
@@ -129,9 +159,12 @@ class CropInteractiveWidget(QWidget):
 
         # --- Mode Titik Manual: klik menambah titik ---
         if self.draw_mode:
+            if event.button() != Qt.LeftButton:
+                return
             nx = max(0.0, min(1.0, position.x() / max(1.0, float(self.width()))))
             ny = max(0.0, min(1.0, position.y() / max(1.0, float(self.height()))))
             self.manual_points.append(QPointF(nx, ny))
+            self._hover_point = QPointF(nx, ny)
             self.update()
             # Double-click akan menyegel polyline (lihat mouseDoubleClickEvent)
             return
@@ -158,22 +191,12 @@ class CropInteractiveWidget(QWidget):
             self.update()
 
     def mouseMoveEvent(self, event):
-        # --- Mode Titik Manual: tampilkan garisan sementara ---
-        if self.draw_mode and len(self.manual_points) > 0:
-            # Gambar garisan dari titik terakhir ke posisi mouse
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.Antialiasing)
-            painter.setPen(QPen(QColor("#10B981"), 2))
-            last = self.manual_points[-1]
-            # Posisi mouse dalam koordinat normalized canvas
-            mx = event.position().x() / max(1.0, float(self.width()))
-            my = event.position().y() / max(1.0, float(self.height()))
-            # Gambar dari titik terakhir ke mouse
-            painter.drawLine(
-                last.x() * self.width(), last.y() * self.height(),
-                mx * self.width(), my * self.height()
+        # --- Mode Titik Manual: perbarui garis pratinjau ke posisi kursor ---
+        if self.draw_mode:
+            self._hover_point = QPointF(
+                max(0.0, min(1.0, event.position().x() / max(1.0, float(self.width())))),
+                max(0.0, min(1.0, event.position().y() / max(1.0, float(self.height())))),
             )
-            painter.end()
             self.update()
             return
 
@@ -216,8 +239,17 @@ class CropInteractiveWidget(QWidget):
 
     def mouseDoubleClickEvent(self, event):
         # Jika sedang mode titik manual, double-click menyegel polyline
-        if self.draw_mode and len(self.manual_points) >= 3:
-            self.finish_manual_polyline()
+        if self.draw_mode:
+            pos = event.position()
+            nx = max(0.0, min(1.0, pos.x() / max(1.0, float(self.width()))))
+            ny = max(0.0, min(1.0, pos.y() / max(1.0, float(self.height()))))
+            if not self.manual_points or math.hypot(
+                self.manual_points[-1].x() - nx, self.manual_points[-1].y() - ny
+            ) > 0.001:
+                self.manual_points.append(QPointF(nx, ny))
+            if len(self.manual_points) >= 3:
+                self.finish_manual_polyline()
+            self.update()
             return
 
         # Jika ada polyline existennya dan editable, lakukan koreksi titik lama
@@ -239,6 +271,13 @@ class CropInteractiveWidget(QWidget):
             self.polyline.insert(best_idx + 1, QPointF(nx, ny))
             self.polyline_changed.emit(self.get_polyline())
             self.update()
+
+    def keyPressEvent(self, event):
+        """Esc membatalkan mode gambar manual."""
+        if self.draw_mode and event.key() == Qt.Key_Escape:
+            self.cancel_manual_draw()
+            return
+        super().keyPressEvent(event)
 
     @staticmethod
     def _distance_to_segment(point: QPointF, a: QPointF, b: QPointF) -> float:
@@ -281,21 +320,37 @@ class CropInteractiveWidget(QWidget):
                 painter.drawEllipse(point, 6.5, 6.5)
 
         # 1c. Polyline manual drawing (mode titik manual)
-        if self.draw_mode and len(self.manual_points) >= 2:
-            painter.setPen(QPen(QColor("#F97316"), 2))
-            painter.setBrush(QColor("#F97316"))
-            # Gambar garisan menghubungkan titik-titik
-            screen_pts = [QPointF(p.x() * self.width(), p.y() * self.height()) for p in self.manual_points]
-            for i in range(len(screen_pts) - 1):
-                painter.drawLine(screen_pts[i], screen_pts[i + 1])
-            # Gambar titik-tik yang sudah diklik
-            for i, p in enumerate(self.manual_points):
-                cx, cy = p.x() * self.width(), p.y() * self.height()
-                painter.drawEllipse(cx - 6, cy - 6, 12, 12)
-                # Label nomor urut
-                painter.setFont(QFont("Segoe UI", 8, QFont.Bold))
+        if self.draw_mode and self.manual_points:
+            screen_pts = [
+                QPointF(p.x() * self.width(), p.y() * self.height()) for p in self.manual_points
+            ]
+            # Garis penghubung antar titik yang sudah diklik
+            if len(screen_pts) >= 2:
+                painter.setBrush(Qt.NoBrush)
+                painter.setPen(QPen(QColor("#F97316"), 2, Qt.SolidLine))
+                for i in range(len(screen_pts) - 1):
+                    painter.drawLine(screen_pts[i], screen_pts[i + 1])
+            # Garis pratinjau putus-putus ke posisi kursor
+            if self._hover_point is not None:
+                painter.setBrush(Qt.NoBrush)
+                painter.setPen(QPen(QColor("#FB923C"), 1.5, Qt.DashLine))
+                painter.drawLine(
+                    screen_pts[-1],
+                    QPointF(
+                        self._hover_point.x() * self.width(),
+                        self._hover_point.y() * self.height(),
+                    ),
+                )
+            # Titik yang sudah diklik + nomor urut
+            painter.setFont(QFont("Segoe UI", 8, QFont.Bold))
+            for i, point in enumerate(screen_pts):
+                painter.setBrush(QBrush(QColor("#F97316")))
+                painter.setPen(QPen(QColor("#FFFFFF"), 1.5))
+                painter.drawEllipse(point, 7.0, 7.0)
                 painter.setPen(QColor("#FFFFFF"))
-                painter.drawText(cx - 4, cy + 4, str(i + 1))
+                painter.drawText(
+                    QRectF(point.x() - 7, point.y() - 7, 14, 14), Qt.AlignCenter, str(i + 1)
+                )
 
         # 2. Efek Overlay Semi-Transparan & Crop Box
         if self.selection_rect and self.selection_rect.isValid() and self.selection_rect.width() > 0:
@@ -377,6 +432,7 @@ class InteractiveCropCanvas(QWidget):
     confirmed = Signal(tuple)       # emit (norm_x0, norm_y0, norm_x1, norm_y1)
     polyline_changed = Signal(list) # emit titik hasil koreksi operator
     polyline_manual_finished = Signal(list) # emit daftar titik ternormalisasi hasil manual drawing
+    manual_draw_cancelled = Signal()        # emit saat mode manual dibatalkan
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -448,6 +504,8 @@ class InteractiveCropCanvas(QWidget):
         self.canvas = CropInteractiveWidget()
         self.canvas.crop_changed.connect(self._on_crop_changed)
         self.canvas.polyline_changed.connect(self.polyline_changed.emit)
+        self.canvas.polyline_manual_finished.connect(self.polyline_manual_finished.emit)
+        self.canvas.manual_draw_cancelled.connect(self.manual_draw_cancelled.emit)
         self.scroll_area.setWidget(self.canvas)
         layout.addWidget(self.scroll_area, 1)
 
@@ -495,3 +553,39 @@ class InteractiveCropCanvas(QWidget):
 
     def clear_polyline(self):
         self.canvas.clear_polyline()
+
+    # -----------------------------------------------------------------
+    # Mode Titik Manual — API publik untuk halaman digitasi
+    # -----------------------------------------------------------------
+    @property
+    def draw_mode(self) -> bool:
+        return self.canvas.draw_mode
+
+    @draw_mode.setter
+    def draw_mode(self, value: bool):
+        self.canvas.set_draw_mode(bool(value))
+
+    @property
+    def manual_points(self) -> list:
+        return self.canvas.manual_points
+
+    def has_image(self) -> bool:
+        return self.canvas.pixmap is not None
+
+    def start_manual_draw(self):
+        """Aktifkan mode gambar polyline manual pada kanvas."""
+        self.canvas.clear_polyline()
+        self.canvas.set_draw_mode(True)
+        self.info_label.setText(
+            "Mode Titik Manual: klik pada denah untuk menambah titik, "
+            "klik 2x untuk menyegel, Esc untuk membatalkan."
+        )
+
+    def cancel_manual_draw(self):
+        """Batalkan mode gambar manual."""
+        self.canvas.cancel_manual_draw()
+        self.info_label.setText("Tarik mouse pada denah untuk memilih area bidang tanah.")
+
+    def finish_manual_polyline(self) -> bool:
+        """Segel polyline manual yang sedang digambar (dipanggil dari luar kanvas)."""
+        return self.canvas.finish_manual_polyline()

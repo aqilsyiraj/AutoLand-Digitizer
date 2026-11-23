@@ -844,6 +844,7 @@ QLabel#DetectionStatus {{
 }}
 QLabel#DetectionStatus[tone="ok"] {{ color: {P['success']}; }}
 QLabel#DetectionStatus[tone="error"] {{ color: {P['danger']}; }}
+QLabel#DetectionStatus[tone="info"] {{ color: {P['brand']}; }}
 QFrame#DetectionInfo, QLabel#DetectionInfo {{
     background-color: {P['surface_alt']};
     border: 1px solid {P['line']};
