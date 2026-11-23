@@ -1,0 +1,28 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Build & Distribution artifacts
+build/
+dist/
+*.spec.bak
+installer_output/
+
+# Application runtime data
+data/*.db
+data/*.sqlite3
+logs/*.log
+temporary/*.png
+!temporary/.gitkeep
+dokumen_masuk/*
+!dokumen_masuk/.gitkeep
+hasil_digitasi/*
+!hasil_digitasi/.gitkeep
