@@ -9,6 +9,7 @@ Seluruh proses memakai AutoCAD Desktop asli (COM Automation); tidak ada mode sim
 import os
 import sys
 import math
+import time
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional, List
 
@@ -246,6 +247,11 @@ class AutoCADService:
             self.last_error = "Library pywin32 belum terpasang atau sistem bukan Windows."
             return False, self.last_error
 
+        try:
+            pythoncom.CoInitialize()
+        except Exception:
+            pass
+
         # Coba hubungkan ke AutoCAD yang sedang terbuka
         try:
             self.acad = win32com.client.GetActiveObject("AutoCAD.Application")
@@ -326,20 +332,57 @@ class AutoCADService:
         if not ok:
             return False, msg
         try:
+            try:
+                pythoncom.CoInitialize()
+            except Exception:
+                pass
+
             # AutoCAD yang baru dijalankan sudah punya Drawing1 kosong. Pakai itu,
             # jangan menambah Drawing2 hanya karena proses butuh DWG baru.
-            try:
-                candidate = self.acad.ActiveDocument
-            except Exception:
-                candidate = None
+            candidate = None
+            for _ in range(3):
+                try:
+                    candidate = self.acad.ActiveDocument
+                    if candidate is not None:
+                        break
+                except Exception:
+                    time.sleep(0.3)
 
             if candidate is not None and self._document_is_empty(candidate):
                 self.doc = candidate
                 reused = True
             else:
                 self._retire_previous_result(candidate)
-                self.doc = self.acad.Documents.Add()
-                reused = False
+                # Tambah dokumen baru via Documents.Add() dengan retry jika AutoCAD sibuk/modal
+                doc_added = None
+                last_exc = None
+                for attempt in range(3):
+                    try:
+                        docs = self.acad.Documents
+                        try:
+                            doc_added = docs.Add()
+                        except TypeError:
+                            doc_added = docs.Add("")
+                        if doc_added is not None:
+                            break
+                    except Exception as exc:
+                        last_exc = exc
+                        time.sleep(0.5)
+
+                if doc_added is not None:
+                    self.doc = doc_added
+                    reused = False
+                elif candidate is not None:
+                    # Fallback ke dokumen aktif yang sudah ada jika Add() ditolak
+                    self.doc = candidate
+                    reused = True
+                else:
+                    raise RuntimeError(
+                        f"AutoCAD menolak pembuatan dokumen baru ({last_exc or 'AutoCAD.Application.Documents'}). "
+                        "Pastikan: 1) AutoCAD sudah terbuka dengan gambar aktif (misal Drawing1.dwg), "
+                        "2) Tidak ada kotak dialog/peringatan yang menghalangi, "
+                        "3) Tekan ESC beberapa kali di AutoCAD untuk membatalkan perintah yang menggantung."
+                    )
 
             self._close_empty_drawings(keep_doc=self.doc)
             self._activate_service_document()

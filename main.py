@@ -55,6 +55,11 @@ def main():
     # 2. Inisialisasi Database SQLite Lokal
     init_db()
 
+    # Cek kesehatan / verifikasi build mandiri (tanpa membuka GUI)
+    if "--check" in sys.argv or "--version" in sys.argv:
+        print(f"{APP_NAME} v{APP_VERSION} - Initialization Check OK")
+        return 0
+
     # 3. Jalankan Aplikasi PySide6
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
