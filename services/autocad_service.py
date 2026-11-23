@@ -10,24 +10,35 @@ import os
 import sys
 import math
 from pathlib import Path
-from PIL import Image
 from typing import Tuple, Dict, Any, Optional, List
 
-# Cek ketersediaan pywin32
+# Cek ketersediaan pywin32 — import dijalankan bertahap saat dibutuhkan.
 PYWIN32_AVAILABLE = False
-try:
-    import win32com.client
-    import pythoncom
-    PYWIN32_AVAILABLE = True
-except ImportError:
-    PYWIN32_AVAILABLE = False
+win32com = None
+pythoncom = None
+
+
+def _ensure_win32() -> bool:
+    """Import win32com/pythoncom dari komputer; tanpa impor di waktu muat."""
+    global PYWIN32_AVAILABLE, win32com, pythoncom
+    if PYWIN32_AVAILABLE:
+        return True
+    try:
+        import win32com.client  # noqa: F401
+        import pythoncom  # noqa: F401
+    except ImportError:
+        return False
+    win32com = sys.modules.get("win32com")
+    pythoncom = sys.modules.get("pythoncom")
+    PYWIN32_AVAILABLE = win32com is not None
+    return PYWIN32_AVAILABLE
 
 
 def to_variant_point(x: float, y: float, z: float = 0.0):
     """
     Mengonversi koordinat 3D ke format VARIANT array VT_R8 yang diterima oleh AutoCAD COM API.
     """
-    if PYWIN32_AVAILABLE:
+    if _ensure_win32() and win32com is not None:
         try:
             return win32com.client.VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_R8, [float(x), float(y), float(z)])
         except Exception:
@@ -38,7 +49,7 @@ def to_variant_point(x: float, y: float, z: float = 0.0):
 def to_variant_double_array(values: List[float]):
     """Mengonversi daftar angka ke VARIANT array VT_R8 untuk AddLightWeightPolyline."""
     data = [float(v) for v in values]
-    if PYWIN32_AVAILABLE:
+    if _ensure_win32() and win32com is not None:
         try:
             return win32com.client.VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_R8, data)
         except Exception:
@@ -230,8 +241,8 @@ class AutoCADService:
         Menghubungkan aplikasi ke AutoCAD Desktop yang sedang berjalan atau membukanya.
         """
         self.last_error = ""
-        
-        if not PYWIN32_AVAILABLE:
+
+        if not _ensure_win32():
             self.last_error = "Library pywin32 belum terpasang atau sistem bukan Windows."
             return False, self.last_error
 
@@ -421,6 +432,8 @@ class AutoCADService:
         # memiliki metadata itu sehingga scale=1 membuat lebarnya hanya
         # 1 unit, sementara polyline memakai koordinat piksel. Akibatnya denah
         # tampak hilang setelah ZoomExtents. Samakan satuan keduanya di sini.
+        from PIL import Image
+
         try:
             with Image.open(abs_image) as img:
                 image_w, image_h = img.size

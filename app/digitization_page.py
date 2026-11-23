@@ -21,10 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
-from PIL import Image
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDoubleSpinBox, QFrame, QGridLayout,
     QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton,
@@ -37,6 +34,7 @@ from config import (
     DETECTION_CROP_DPI,
     DETECTION_DPI,
     DETECTION_PREVIEW_DPI,
+    DETECTION_SCAN_DPI,
     HASIL_DIGITASI_DIR,
     JENIS_HAK_MAP,
     STATUS_MENUNGGU_TRACING,
@@ -54,6 +52,7 @@ from services.detection_service import (
     detect_polylines_from_array,
     guess_document_hints,
     polygon_area,
+    render_page_array,
     suggest_denah_page,
     write_coordinate_files,
 )
@@ -62,9 +61,7 @@ from services.naming_service import (
     format_document_identity, normalize_gs_number, sanitize_filename,
     validate_document_input,
 )
-from services.pdf_service import (
-    crop_pdf_region_to_file, get_pdf_info, render_pdf_page_to_pixmap,
-)
+from services.pdf_service import crop_pdf_region_to_file, get_pdf_info
 from ui.components.button import Button
 from ui.components.crop_canvas import InteractiveCropCanvas
 from ui.components.guide_banner import GuideBanner
@@ -99,6 +96,7 @@ class DigitizationPage(QWidget):
         self.crop_confirmed_by_user = False
         self.crop_path: str = ""
         self.processing = False
+        self._detect_cache: dict = {}
 
         self._setup_ui()
 
@@ -655,6 +653,7 @@ class DigitizationPage(QWidget):
         self.crop_confirmed_by_user = False
         self.crop_path = ""
         self.processing = False
+        self._detect_cache.clear()
         self.canvas.clear_polyline()
         self.log_view.clear()
         self.progress.setValue(0)
@@ -767,9 +766,20 @@ class DigitizationPage(QWidget):
             self._detect_page(int(page))
 
     def _load_page_preview(self, pdf_path: str, page_number: int):
-        preview = render_pdf_page_to_pixmap(pdf_path, page_number, dpi=DETECTION_PREVIEW_DPI)
-        if preview:
-            self.canvas.load_page_image(preview)
+        """Muat pratinjau halaman dari array render yang sama dengan deteksi
+        otomatis (karena render_page_array direuse, hanya satu pixmap)."""
+        import io
+        from PIL import Image
+
+        arr, _err = render_page_array(pdf_path, page_number, dpi=DETECTION_PREVIEW_DPI)
+        if arr is None:
+            return
+        try:
+            buf = io.BytesIO()
+            Image.fromarray(arr).save(buf, format="PNG")
+            self.canvas.load_page_image(buf.getvalue())
+        except Exception:
+            pass
 
     def _show_saved_detection(self):
         """Menampilkan polyline hasil koreksi sebelumnya agar tidak hilang saat membuka ulang."""
@@ -817,22 +827,37 @@ class DigitizationPage(QWidget):
         if not pdf_path or not os.path.exists(pdf_path):
             return
 
-        self._set_detection_status(f"Mendeteksi polyline pada halaman {page_number}…")
-        QApplication.processEvents()
+        # Deteksi otomatis direuse jika halaman sama sudah diperiksa
+        # (mis. operator beralih halaman turun dan kembali).
+        cache_key = (os.path.abspath(pdf_path), int(page_number))
+        cached = self._detect_cache.get(cache_key)
+        if cached is not None:
+            result = cached
+        else:
+            self._set_detection_status(f"Mendeteksi polyline pada halaman {page_number}…")
+            QApplication.processEvents()
 
-        if self.doc_id:
-            update_document(self.doc_id, halaman_pdf=page_number)
+            if self.doc_id:
+                update_document(self.doc_id, halaman_pdf=page_number)
 
-        self._load_page_preview(pdf_path, page_number)
+            self._load_page_preview(pdf_path, page_number)
 
-        result = detect_on_page(pdf_path, page_number, dpi=DETECTION_DPI)
+            image, _preview_err = render_page_array(
+                pdf_path, page_number, dpi=DETECTION_SCAN_DPI
+            )
+            result = detect_on_page(pdf_path, page_number, dpi=DETECTION_SCAN_DPI, image=image)
+            # Copy list/dict supaya operasi selanjutnya (mis. penambahan
+            # kandidat manual) tidak mengaburkan cache deteksi otomatis.
+            result["candidates"] = [dict(c) for c in result.get("candidates", [])]
+            self._detect_cache[cache_key] = result
+
         self.detection_meta = {
             "page": page_number,
             "image_width": result.get("image_width", 0),
             "image_height": result.get("image_height", 0),
-            "dpi": result.get("dpi", DETECTION_DPI),
+            "dpi": result.get("dpi", DETECTION_SCAN_DPI),
         }
-        self.candidates = result.get("candidates", [])
+        self.candidates = list(result.get("candidates", []))
 
         self.combo_candidate.blockSignals(True)
         self.combo_candidate.clear()
@@ -938,6 +963,9 @@ class DigitizationPage(QWidget):
             self._set_detection_status("Area potongan disimpan.", "ok")
             QMessageBox.warning(self, "Gagal Memotong", path)
             return
+        import numpy as np
+        from PIL import Image
+
         try:
             image = Image.open(path).convert("RGB")
             array = np.asarray(image)
@@ -1224,6 +1252,8 @@ class DigitizationPage(QWidget):
             self.btn_run.setEnabled(True)
 
     def _execute_auto_process(self, identity: str, luas_doc: float, pdf_path: str):
+        from PIL import Image
+
         page = int(self.detection_meta.get("page") or self.doc_data.get("halaman_pdf") or 1)
         box = self.crop_box or (0.0, 0.0, 1.0, 1.0)
         if len(box) != 4:

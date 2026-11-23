@@ -19,15 +19,46 @@ import json
 import math
 import os
 import re
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
 
-try:
-    import cv2
-except ImportError:  # pragma: no cover - dependensi ada di requirements.txt
-    pass
+class _LazyModule:
+    """Pembungkus import lambat: pustaka cuma muat saat pertama diakses."""
+
+    __slots__ = ("_name", "_module")
+
+    def __init__(self, name: str):
+        object.__setattr__(self, "_name", name)
+        object.__setattr__(self, "_module", None)
+
+    def _load(self):
+        module = object.__getattribute__(self, "_module")
+        if module is None:
+            import importlib
+
+            name = object.__getattribute__(self, "_name")
+            module = importlib.import_module(name)
+            object.__setattr__(self, "_module", module)
+        return module
+
+    def __getattr__(self, item):
+        return getattr(self._load(), item)
+
+
+np = _LazyModule("numpy")
+fitz = _LazyModule("pymupdf")
+
+cv2 = _LazyModule("cv2")
+
+
+def _cv2_available() -> bool:
+    try:
+        cv2._load()
+        return True
+    except Exception:  # pragma: no cover
+        return False
 
 
 # =====================================================================
@@ -70,18 +101,6 @@ def preprocess_image_for_detection(
     blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
 
     return blurred
-
-try:  # PyMuPDF 2.x merekomendasikan nama pymupdf, tetapi fitz masih kompatibel.
-    import pymupdf as fitz
-except ImportError:  # pragma: no cover - kompatibilitas versi lama
-    import fitz  # type: ignore
-
-try:
-    import cv2
-    CV2_AVAILABLE = True
-except ImportError:  # pragma: no cover - dependensi ada di requirements.txt
-    cv2 = None  # type: ignore
-    CV2_AVAILABLE = False
 
 from config import (
     DETECTION_DPI,
@@ -149,15 +168,44 @@ def _crop_box_from_points(
 # Render PDF & pemilihan halaman denah
 # =====================================================================
 
+_PAGE_ARRAY_CACHE: "OrderedDict[Tuple[str, int, int], Tuple[np.ndarray, str]]" = OrderedDict()
+
+
+def _page_array_cache_get(key):
+    cached = _PAGE_ARRAY_CACHE.get(key)
+    if cached is not None:
+        # Bawa ke depan agar isi cache tetap panas selama penggunaan berturut-turut.
+        _PAGE_ARRAY_CACHE.move_to_end(key)
+    return cached
+
+
+def _page_array_cache_put(key, value):
+    _PAGE_ARRAY_CACHE[key] = value
+    _PAGE_ARRAY_CACHE.move_to_end(key)
+    while len(_PAGE_ARRAY_CACHE) > 4:
+        _PAGE_ARRAY_CACHE.popitem(last=False)
+
+
+def clear_page_array_cache():
+    _PAGE_ARRAY_CACHE.clear()
+
+
 def render_page_array(pdf_path: str, page_number: int, dpi: int = DETECTION_DPI) -> Tuple[Optional[np.ndarray], str]:
     """
     Merender satu halaman PDF menjadi array RGB numpy.
-    Mengembalikan (array, pesan_error).
+    Mengembalikan (array, pesan_error). Hasil direuse selama sesi agar
+    deteksi ulang pada halaman sama tidak merender ulang pixmap.
     """
+    key = (os.path.abspath(pdf_path), int(page_number), int(dpi))
+    cached = _page_array_cache_get(key)
+    if cached is not None:
+        return cached
     try:
         doc = fitz.open(pdf_path)
         if page_number < 1 or page_number > doc.page_count:
-            return None, f"Nomor halaman {page_number} di luar rentang (1-{doc.page_count})."
+            result = (None, f"Nomor halaman {page_number} di luar rentang (1-{doc.page_count}).")
+            doc.close()
+            return result
         page = doc[page_number - 1]
         pix = page.get_pixmap(dpi=int(dpi), alpha=False)
         channels = pix.n
@@ -166,8 +214,10 @@ def render_page_array(pdf_path: str, page_number: int, dpi: int = DETECTION_DPI)
             image = image[:, :, :3]
         elif channels == 1:
             image = np.repeat(image, 3, axis=2)
+        result = (np.ascontiguousarray(image), "")
         doc.close()
-        return np.ascontiguousarray(image), ""
+        _page_array_cache_put(key, result)
+        return result
     except Exception as exc:
         return None, f"Gagal merender halaman PDF: {exc}"
 
@@ -325,7 +375,7 @@ def detect_polylines_from_array(
     """
     Deteksi batas bidang dari citra RGB menggunakan adaptive threshold + contour.
     """
-    if not CV2_AVAILABLE:
+    if not _cv2_available():
         return {
             "success": False,
             "candidates": [],
@@ -335,7 +385,7 @@ def detect_polylines_from_array(
         return {"success": False, "candidates": [], "message": "Gambar denah kosong."}
 
     original_h, original_w = image.shape[:2]
-    max_side = 2400
+    max_side = 1600
     scale = min(1.0, max_side / max(original_h, original_w))
     work = image
     if scale < 1.0:
@@ -353,6 +403,14 @@ def detect_polylines_from_array(
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_close)
     kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
     binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_open)
+
+    # Ekspresi cepat: jika tak ada piksel terbentuk sama sekali, hentikan dulu.
+    if cv2.countNonZero(binary) == 0:
+        return {
+            "success": False,
+            "candidates": [],
+            "message": "Tidak ada pola terdeteksi pada halaman.",
+        }
 
     contours, _ = cv2.findContours(binary, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     candidates: List[Dict[str, Any]] = []
@@ -456,13 +514,17 @@ def detect_on_page(
     page_number: int,
     dpi: int = DETECTION_DPI,
     use_vector_first: bool = True,
+    image: Optional[np.ndarray] = None,
 ) -> Dict[str, Any]:
     """
     Alur lengkap: render halaman -> coba vektor -> deteksi raster -> susun kandidat.
+    Parameter `image` memungkinkan panggilan ulang memakai pixmap yang sudah
+    dirender (mis. sebelumnya oleh render_page_array) tanpa merender ulang.
     """
-    image, err = render_page_array(pdf_path, page_number, dpi=dpi)
     if image is None:
-        return {"success": False, "candidates": [], "message": err, "page": page_number}
+        image, err = render_page_array(pdf_path, page_number, dpi=dpi)
+        if image is None:
+            return {"success": False, "candidates": [], "message": err, "page": page_number}
 
     result: Dict[str, Any]
     if use_vector_first:

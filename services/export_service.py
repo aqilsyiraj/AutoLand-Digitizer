@@ -4,18 +4,50 @@ Menghasilkan rekapitulasi pekerjaan dalam format Excel (.xlsx), CSV (.csv),
 dan paket arsip ZIP berisi seluruh file DWG, berkas koordinat, beserta rekapitulasi.
 """
 
+import importlib
 import os
 import csv
 import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 
-from config import HASIL_DIGITASI_DIR, STATUS_LABELS, STATUS_SELESAI
-from database.db import get_batch, get_documents_by_batch, get_batch_stats, add_log
+
+class _Lazy:
+    """Pembungkus import lambat (openpyxl dipakai hanya saat ekspor)."""
+
+    __slots__ = ("_path",)
+
+    def __init__(self, path: str):
+        object.__setattr__(self, "_path", path)
+
+    def _resolve(self):
+        path = object.__getattribute__(self, "_path")
+        module_name, dot, attr = path.rpartition(".")
+        if not dot:
+            return importlib.import_module(path)
+        obj = importlib.import_module(module_name)
+        for part in [p for p in attr.split(".") if p]:
+            obj = getattr(obj, part)
+        return obj
+
+    def __getattr__(self, item):
+        return getattr(self._resolve(), item)
+
+    def __call__(self, *args, **kwargs):
+        return self._resolve()(*args, **kwargs)
+
+
+openpyxl = _Lazy("openpyxl")
+Font = _Lazy("openpyxl.styles.Font")
+PatternFill = _Lazy("openpyxl.styles.PatternFill")
+Alignment = _Lazy("openpyxl.styles.Alignment")
+Border = _Lazy("openpyxl.styles.Border")
+Side = _Lazy("openpyxl.styles.Side")
+get_column_letter = _Lazy("openpyxl.utils.get_column_letter")
+
+from config import HASIL_DIGITASI_DIR, STATUS_LABELS, STATUS_SELESAI  # noqa: E402
+from database.db import get_batch, get_documents_by_batch, get_batch_stats, add_log  # noqa: E402
 
 def check_batch_readiness(batch_id: int) -> Dict[str, Any]:
     """

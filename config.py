@@ -71,8 +71,9 @@ STATUS_LABELS = {
 }
 
 # Pengaturan deteksi polyline otomatis (offline computer vision)
-DETECTION_DPI = 200              # DPI untuk analisis gambar denah
-DETECTION_PREVIEW_DPI = 150      # DPI untuk pratinjau di layar
+DETECTION_DPI = 200              # DPI standar untuk analisis gambar denah
+DETECTION_SCAN_DPI = 100         # DPI lebih rendah untuk pemindaian deteksi otomatis
+DETECTION_PREVIEW_DPI = DETECTION_SCAN_DPI  # preview berkongsi render dengan deteksi
 DETECTION_CROP_DPI = 300         # DPI untuk denah hasil potongan
 DETECTION_MIN_CONFIDENCE = 0.25  # Ambang batas kandidat diterima (dilebarkan untuk skan variatif)
 DETECTION_MAX_CANDIDATES = 5     # Maksimal kandidat yang ditampilkan

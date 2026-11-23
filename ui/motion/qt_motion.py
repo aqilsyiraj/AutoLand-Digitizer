@@ -35,6 +35,18 @@ class MotionGroup(QParallelAnimationGroup):
         self.finished.connect(self.deleteLater)
 
 
+def _drop_effect_when_done(widget):
+    """Hapus efek grafis widget setelah animasinya selesai (tidak terlalu lambat:
+    opacity sudah mencapai target pada signal finished)."""
+
+    def _remove():
+        effect = widget.graphicsEffect()
+        if isinstance(effect, QGraphicsOpacityEffect) and effect.opacity() >= 1.0:
+            widget.setGraphicsEffect(None)
+
+    return _remove
+
+
 def fade_in(widget, duration: int = 180, start: float = 0.88, parent=None):
     """Fade widget masuk sekali saat widget tampil."""
     effect = widget.graphicsEffect()
@@ -48,6 +60,7 @@ def fade_in(widget, duration: int = 180, start: float = 0.88, parent=None):
     anim.setDuration(duration)
     anim.setEasingCurve(QEasingCurve.OutCubic)
     anim.start()
+    anim.finished.connect(lambda: _drop_effect_when_done(widget)())
     return anim
 
 
@@ -73,6 +86,7 @@ def fade_swap(hidden_widget, visible_widget, duration: int = 180):
         out.setDuration(max(80, duration // 2))
         out.setEasingCurve(QEasingCurve.InCubic)
         group.addAnimation(out)
+        out.finished.connect(lambda: _drop_effect_when_done(hidden_widget)())
 
     if visible_widget is not None:
         inn = QPropertyAnimation(
@@ -83,6 +97,7 @@ def fade_swap(hidden_widget, visible_widget, duration: int = 180):
         inn.setDuration(duration)
         inn.setEasingCurve(QEasingCurve.OutCubic)
         group.addAnimation(inn)
+        inn.finished.connect(lambda: _drop_effect_when_done(visible_widget)())
 
     group.start()
     return group
@@ -108,6 +123,7 @@ def pulse(widget, cycles: int = 2, duration: int = 260):
         up.setDuration(duration // 2)
         group.addAnimation(down)
         group.addAnimation(up)
+    group.finished.connect(lambda: _drop_effect_when_done(widget)())
     group.start()
     return group
 

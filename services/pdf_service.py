@@ -4,15 +4,45 @@ Ekstraksi, rendering preview, dan pemotongan (crop) denah bidang tanah resolusi 
 Menggunakan PyMuPDF (fitz) dan Pillow.
 """
 
+import io
 import os
 from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
-try:  # PyMuPDF 2.x merekomendasikan nama pymupdf.
-    import pymupdf as fitz
-except ImportError:  # pragma: no cover - kompatibilitas versi lama
-    import fitz  # type: ignore
-from PIL import Image
-import io
+
+
+class _LazyModule:
+    """Pembungkus import lambat: pustaka cuma muat saat pertama diakses."""
+
+    __slots__ = ("_name", "_fallback", "_module")
+
+    def __init__(self, name: str, fallback: str = ""):
+        object.__setattr__(self, "_name", name)
+        object.__setattr__(self, "_fallback", fallback)
+        object.__setattr__(self, "_module", None)
+
+    def _load(self):
+        module = object.__getattribute__(self, "_module")
+        if module is None:
+            name = object.__getattribute__(self, "_name")
+            module = None
+            if name == "fitz":
+                # PyMuPDF 2.x merekomendasikan nama pymupdf; fallback kompatibilitas lama.
+                try:
+                    module = __import__("pymupdf")
+                except ImportError:
+                    module = __import__("fitz")
+            else:
+                module = __import__(name)
+            object.__setattr__(self, "_module", module)
+        return module
+
+    def __getattr__(self, item):
+        return getattr(self._load(), item)
+
+
+fitz = _LazyModule("fitz")
+
+from PIL import Image  # noqa: E402  (Pillow ringan; tetap sesudah konfigurasi)
 
 from config import TEMPORARY_DIR, ensure_directories
 
