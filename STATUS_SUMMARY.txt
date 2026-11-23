@@ -1,0 +1,23 @@
+STATUS PERBAIKAN CRITICAL ERROR
+================================
+
+Masalah: AttributeError: 'InteractiveCropCanvas' object has no attribute 'polyline_manual_finished'
+
+Sebab: Kelas InteractiveCropCanvas di ui/components/crop_canvas.py tidak memiliki sinyal
+polyline_manual_finished meskipun sinyal tersebut ada di kelas CropInteractiveWidget.
+
+Solusi: Menambahkan sinyal ke kelas InteractiveCropCanvas pada baris 378:
+  polyline_manual_finished = Signal(list) # emit daftar titik ternormalisasi hasil manual drawing
+
+Verifikasi Lulus:
+- main.py: Aplikasi bisa dibuka
+- smoke_final.py: SEMUA SMOKE TEST LULUS
+- audit_overlap.py: OK di 1440x900, 1366x768, 1180x760
+- compileall: OK
+- run_tests.py: 8 test lulus (7 test_services + 1 test_pdf)
+
+Fitur "Titi Manual" siap digunakan:
+- Aktif ketika auto-detect menampilkan 0 kandidat
+- Pengguna klik-titik membentuk batas tanah
+- Double-click menyegel polyline
+- Lanjut ke Langkah 2 setelah selesai

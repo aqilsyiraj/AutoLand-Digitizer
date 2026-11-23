@@ -1,0 +1,130 @@
+{
+  "identitas_dokumen": "M. 1339 GS00026/1971",
+  "metode_deteksi": "opencv-adaptive-threshold",
+  "keyakinan_deteksi": 0.9526,
+  "lebar_gambar_px": 1798,
+  "tinggi_gambar_px": 1708,
+  "luas_dokumen_m2": 12220.0,
+  "luas_polyline_px2": 1692580.2027286727,
+  "meter_per_piksel": 0.08496909145788721,
+  "path_crop": "C:\\Users\\iniha\\OneDrive\\Documents\\AI\\Otomatisasi AutoCAD\\hasil_digitasi\\Batch_10_Telajung\\Gambar_Denah\\crop_doc_15_e3bb9f5d.png",
+  "titik": [
+    {
+      "no": 1,
+      "x_px": 1699.603,
+      "y_px": 91.5,
+      "x_normalized": 0.945274,
+      "y_normalized": 0.053571,
+      "x_model": 144.4137,
+      "y_model": 137.3526
+    },
+    {
+      "no": 2,
+      "x_px": 1583.455,
+      "y_px": 452.518,
+      "x_normalized": 0.880676,
+      "y_normalized": 0.26494,
+      "x_model": 134.5447,
+      "y_model": 106.6772
+    },
+    {
+      "no": 3,
+      "x_px": 1701.679,
+      "y_px": 908.981,
+      "x_normalized": 0.946429,
+      "y_normalized": 0.53219,
+      "x_model": 144.5901,
+      "y_model": 67.8919
+    },
+    {
+      "no": 4,
+      "x_px": 1436.195,
+      "y_px": 1601.976,
+      "x_normalized": 0.798774,
+      "y_normalized": 0.937925,
+      "x_model": 122.0322,
+      "y_model": 9.0088
+    },
+    {
+      "no": 5,
+      "x_px": 372.179,
+      "y_px": 1616.5,
+      "x_normalized": 0.206996,
+      "y_normalized": 0.946429,
+      "x_model": 31.6237,
+      "y_model": 7.7747
+    },
+    {
+      "no": 6,
+      "x_px": 375.156,
+      "y_px": 798.217,
+      "x_normalized": 0.208652,
+      "y_normalized": 0.46734,
+      "x_model": 31.8766,
+      "y_model": 77.3034
+    },
+    {
+      "no": 7,
+      "x_px": 175.106,
+      "y_px": 794.882,
+      "x_normalized": 0.097389,
+      "y_normalized": 0.465388,
+      "x_model": 14.8786,
+      "y_model": 77.5868
+    },
+    {
+      "no": 8,
+      "x_px": 185.111,
+      "y_px": 754.859,
+      "x_normalized": 0.102954,
+      "y_normalized": 0.441955,
+      "x_model": 15.7287,
+      "y_model": 80.9876
+    },
+    {
+      "no": 9,
+      "x_px": 85.086,
+      "y_px": 684.814,
+      "x_normalized": 0.047323,
+      "y_normalized": 0.400945,
+      "x_model": 7.2297,
+      "y_model": 86.9392
+    },
+    {
+      "no": 10,
+      "x_px": 121.763,
+      "y_px": 621.442,
+      "x_normalized": 0.067721,
+      "y_normalized": 0.363842,
+      "x_model": 10.3461,
+      "y_model": 92.3238
+    },
+    {
+      "no": 11,
+      "x_px": 818.11,
+      "y_px": 402.724,
+      "x_normalized": 0.455011,
+      "y_normalized": 0.235787,
+      "x_model": 69.5141,
+      "y_model": 110.9081
+    },
+    {
+      "no": 12,
+      "x_px": 782.852,
+      "y_px": 278.234,
+      "x_normalized": 0.435401,
+      "y_normalized": 0.1629,
+      "x_model": 66.5182,
+      "y_model": 121.486
+    },
+    {
+      "no": 13,
+      "x_px": 1388.731,
+      "y_px": 124.467,
+      "x_normalized": 0.772375,
+      "y_normalized": 0.072873,
+      "x_model": 117.9992,
+      "y_model": 134.5513
+    }
+  ]
+}

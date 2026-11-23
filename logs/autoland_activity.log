@@ -1,0 +1,120 @@
+
+[CRITICAL ERROR] Traceback (most recent call last):
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 78, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 67, in main
+    window = MainWindow()
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 41, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 70, in _setup_ui
+    self.page_digitize = DigitizationPage()
+                         ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 102, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 150, in _setup_ui
+    self.stack.addWidget(self._create_step_page())
+                         ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 244, in _create_step_page
+    self.canvas.polyline_manual_finished.connect(self._on_manual_polyline_finished)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'InteractiveCropCanvas' object has no attribute 'polyline_manual_finished'
+
+
+[CRITICAL ERROR] Traceback (most recent call last):
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 78, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 67, in main
+    window = MainWindow()
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 41, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 70, in _setup_ui
+    self.page_digitize = DigitizationPage()
+                         ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 102, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 150, in _setup_ui
+    self.stack.addWidget(self._create_step_page())
+                         ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 244, in _create_step_page
+    self.canvas.polyline_manual_finished.connect(self._on_manual_polyline_finished)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'InteractiveCropCanvas' object has no attribute 'polyline_manual_finished'
+
+
+[CRITICAL ERROR] Traceback (most recent call last):
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 78, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 67, in main
+    window = MainWindow()
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 41, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 70, in _setup_ui
+    self.page_digitize = DigitizationPage()
+                         ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 102, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 150, in _setup_ui
+    self.stack.addWidget(self._create_step_page())
+                         ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 244, in _create_step_page
+    self.canvas.polyline_manual_finished.connect(self._on_manual_polyline_finished)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'InteractiveCropCanvas' object has no attribute 'polyline_manual_finished'
+
+
+[CRITICAL ERROR] Traceback (most recent call last):
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 78, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 67, in main
+    window = MainWindow()
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 41, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 70, in _setup_ui
+    self.page_digitize = DigitizationPage()
+                         ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 102, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 150, in _setup_ui
+    self.stack.addWidget(self._create_step_page())
+                         ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 244, in _create_step_page
+    self.canvas.polyline_manual_finished.connect(self._on_manual_polyline_finished)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'InteractiveCropCanvas' object has no attribute 'polyline_manual_finished'
+
+
+[CRITICAL ERROR] Traceback (most recent call last):
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 78, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\main.py", line 67, in main
+    window = MainWindow()
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 41, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\main_window.py", line 70, in _setup_ui
+    self.page_digitize = DigitizationPage()
+                         ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 102, in __init__
+    self._setup_ui()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 150, in _setup_ui
+    self.stack.addWidget(self._create_step_page())
+                         ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\iniha\OneDrive\Documents\AI\Otomatisasi AutoCAD\app\digitization_page.py", line 244, in _create_step_page
+    self.canvas.polyline_manual_finished.connect(self._on_manual_polyline_finished)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'InteractiveCropCanvas' object has no attribute 'polyline_manual_finished'
+

@@ -1,0 +1,9 @@
+# AutoLand Digitizer - Dependencies
+PySide6>=6.6.0
+PyMuPDF>=1.23.0
+Pillow>=10.0.0
+numpy>=1.26.0
+opencv-python-headless>=4.9.0
+pywin32>=306
+openpyxl>=3.1.0
+pyinstaller>=6.0.0

@@ -1,0 +1,94 @@
+{
+  "identitas_dokumen": "M. 1639 GS00188/2003",
+  "metode_deteksi": "opencv-adaptive-threshold",
+  "keyakinan_deteksi": 0.9029,
+  "lebar_gambar_px": 2212,
+  "tinggi_gambar_px": 1890,
+  "luas_dokumen_m2": 1530.0,
+  "luas_polyline_px2": 870962.8392466155,
+  "meter_per_piksel": 0.041912725454473686,
+  "path_crop": "C:\\Users\\iniha\\OneDrive\\Documents\\AI\\Otomatisasi AutoCAD\\hasil_digitasi\\Batch_10_Telajung\\Gambar_Denah\\crop_doc_18_dbc3a0f3.png",
+  "titik": [
+    {
+      "no": 1,
+      "x_px": 1030.934,
+      "y_px": 185.0,
+      "x_normalized": 0.466064,
+      "y_normalized": 0.097884,
+      "x_model": 43.2093,
+      "y_model": 71.4612
+    },
+    {
+      "no": 2,
+      "x_px": 845.763,
+      "y_px": 850.0,
+      "x_normalized": 0.382352,
+      "y_normalized": 0.449736,
+      "x_model": 35.4482,
+      "y_model": 43.5892
+    },
+    {
+      "no": 3,
+      "x_px": 727.335,
+      "y_px": 1148.087,
+      "x_normalized": 0.328813,
+      "y_normalized": 0.607453,
+      "x_model": 30.4846,
+      "y_model": 31.0956
+    },
+    {
+      "no": 4,
+      "x_px": 600.543,
+      "y_px": 1495.001,
+      "x_normalized": 0.271493,
+      "y_normalized": 0.791006,
+      "x_model": 25.1704,
+      "y_model": 16.5555
+    },
+    {
+      "no": 5,
+      "x_px": 1131.022,
+      "y_px": 1680.001,
+      "x_normalized": 0.511312,
+      "y_normalized": 0.88889,
+      "x_model": 47.4042,
+      "y_model": 8.8016
+    },
+    {
+      "no": 6,
+      "x_px": 1296.173,
+      "y_px": 1530.0,
+      "x_normalized": 0.585973,
+      "y_normalized": 0.809524,
+      "x_model": 54.3262,
+      "y_model": 15.0886
+    },
+    {
+      "no": 7,
+      "x_px": 1489.163,
+      "y_px": 1209.54,
+      "x_normalized": 0.67322,
+      "y_normalized": 0.639968,
+      "x_model": 62.4149,
+      "y_model": 28.5199
+    },
+    {
+      "no": 8,
+      "x_px": 1468.171,
+      "y_px": 346.224,
+      "x_normalized": 0.66373,
+      "y_normalized": 0.183187,
+      "x_model": 61.535,
+      "y_model": 64.7039
+    },
+    {
+      "no": 9,
+      "x_px": 1416.281,
+      "y_px": 265.0,
+      "x_normalized": 0.640272,
+      "y_normalized": 0.140212,
+      "x_model": 59.3602,
+      "y_model": 68.1082
+    }
+  ]
+}

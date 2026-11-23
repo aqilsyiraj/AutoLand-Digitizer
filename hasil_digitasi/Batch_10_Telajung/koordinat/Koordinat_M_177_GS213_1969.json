@@ -1,0 +1,49 @@
+{
+  "identitas_dokumen": "M. 177 GS213/1969",
+  "metode_deteksi": "opencv-adaptive-threshold",
+  "keyakinan_deteksi": 0.8721,
+  "lebar_gambar_px": 1572,
+  "tinggi_gambar_px": 1065,
+  "luas_dokumen_m2": 5580.0,
+  "luas_polyline_px2": 790773.9853242585,
+  "meter_per_piksel": 0.0840022488181146,
+  "path_crop": "C:\\Users\\iniha\\OneDrive\\Documents\\AI\\Otomatisasi AutoCAD\\temporary\\crop_doc_14_83a83585.png",
+  "titik": [
+    {
+      "no": 1,
+      "x_px": 1431.35,
+      "y_px": 174.736,
+      "x_normalized": 0.910528,
+      "y_normalized": 0.164071,
+      "x_model": 120.2366,
+      "y_model": 74.7842
+    },
+    {
+      "no": 2,
+      "x_px": 246.986,
+      "y_px": 364.891,
+      "x_normalized": 0.157116,
+      "y_normalized": 0.342621,
+      "x_model": 20.7474,
+      "y_model": 58.8107
+    },
+    {
+      "no": 3,
+      "x_px": 109.353,
+      "y_px": 926.261,
+      "x_normalized": 0.069563,
+      "y_normalized": 0.869728,
+      "x_model": 9.1859,
+      "y_model": 11.6544
+    },
+    {
+      "no": 4,
+      "x_px": 1347.945,
+      "y_px": 935.354,
+      "x_normalized": 0.857471,
+      "y_normalized": 0.878267,
+      "x_model": 113.2304,
+      "y_model": 10.8906
+    }
+  ]
+}

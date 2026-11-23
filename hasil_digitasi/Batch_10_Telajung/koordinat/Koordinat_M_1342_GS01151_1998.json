@@ -1,0 +1,49 @@
+{
+  "identitas_dokumen": "M. 1342 GS01151/1998",
+  "metode_deteksi": "opencv-adaptive-threshold",
+  "keyakinan_deteksi": 0.9887,
+  "lebar_gambar_px": 1757,
+  "tinggi_gambar_px": 1234,
+  "luas_dokumen_m2": 140.0,
+  "luas_polyline_px2": 301603.2293960244,
+  "meter_per_piksel": 0.021544976471072366,
+  "path_crop": "C:\\Users\\iniha\\OneDrive\\Documents\\AI\\Otomatisasi AutoCAD\\hasil_digitasi\\Batch_10_Telajung\\Gambar_Denah\\crop_doc_19_16d134a9.png",
+  "titik": [
+    {
+      "no": 1,
+      "x_px": 573.44,
+      "y_px": 323.507,
+      "x_normalized": 0.326374,
+      "y_normalized": 0.262161,
+      "x_model": 12.3548,
+      "y_model": 19.6165
+    },
+    {
+      "no": 2,
+      "x_px": 590.111,
+      "y_px": 790.426,
+      "x_normalized": 0.335863,
+      "y_normalized": 0.640539,
+      "x_model": 12.7139,
+      "y_model": 9.5568
+    },
+    {
+      "no": 3,
+      "x_px": 1172.334,
+      "y_px": 892.14,
+      "x_normalized": 0.667236,
+      "y_normalized": 0.722966,
+      "x_model": 25.2579,
+      "y_model": 7.3654
+    },
+    {
+      "no": 4,
+      "x_px": 1180.224,
+      "y_px": 343.52,
+      "x_normalized": 0.671727,
+      "y_normalized": 0.27838,
+      "x_model": 25.4279,
+      "y_model": 19.1854
+    }
+  ]
+}

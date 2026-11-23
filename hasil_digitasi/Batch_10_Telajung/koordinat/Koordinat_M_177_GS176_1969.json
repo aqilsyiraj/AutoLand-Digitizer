@@ -1,0 +1,67 @@
+{
+  "identitas_dokumen": "M. 177 GS176/1969",
+  "metode_deteksi": "opencv-adaptive-threshold",
+  "keyakinan_deteksi": 0.8849,
+  "lebar_gambar_px": 2168,
+  "tinggi_gambar_px": 1348,
+  "luas_dokumen_m2": 1640.0,
+  "luas_polyline_px2": 932206.1496864501,
+  "meter_per_piksel": 0.04194362310093482,
+  "path_crop": "C:\\Users\\iniha\\OneDrive\\Documents\\AI\\Otomatisasi AutoCAD\\hasil_digitasi\\Batch_10_Telajung\\Gambar_Denah\\crop_doc_13_7968ca4a.png",
+  "titik": [
+    {
+      "no": 1,
+      "x_px": 450.275,
+      "y_px": 206.872,
+      "x_normalized": 0.207691,
+      "y_normalized": 0.153466,
+      "x_model": 18.8862,
+      "y_model": 47.863
+    },
+    {
+      "no": 2,
+      "x_px": 310.192,
+      "y_px": 1051.04,
+      "x_normalized": 0.143078,
+      "y_normalized": 0.779703,
+      "x_model": 13.0106,
+      "y_model": 12.4556
+    },
+    {
+      "no": 3,
+      "x_px": 1614.374,
+      "y_px": 1106.589,
+      "x_normalized": 0.744637,
+      "y_normalized": 0.820912,
+      "x_model": 67.7127,
+      "y_model": 10.1256
+    },
+    {
+      "no": 4,
+      "x_px": 1794.436,
+      "y_px": 570.565,
+      "x_normalized": 0.827692,
+      "y_normalized": 0.423268,
+      "x_model": 75.2651,
+      "y_model": 32.6085
+    },
+    {
+      "no": 5,
+      "x_px": 739.569,
+      "y_px": 313.409,
+      "x_normalized": 0.34113,
+      "y_normalized": 0.232499,
+      "x_model": 31.0202,
+      "y_model": 43.3945
+    },
+    {
+      "no": 6,
+      "x_px": 735.571,
+      "y_px": 285.386,
+      "x_normalized": 0.339286,
+      "y_normalized": 0.211711,
+      "x_model": 30.8525,
+      "y_model": 44.5699
+    }
+  ]
+}
