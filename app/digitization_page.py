@@ -1379,9 +1379,13 @@ class DigitizationPage(QWidget):
         except Exception:
             handles_old = {}
         replace_bbox = None
+        poly_handle = ""
         if handles_old and handles_old.get("dwg") == str(dest):
+            raster_handle_old = str(handles_old.get("raster") or "")
+            if raster_handle_old:
+                replace_bbox = autocad_service.get_entity_bbox(raster_handle_old)
             poly_handle = str(handles_old.get("polyline") or "")
-            if poly_handle:
+            if replace_bbox is None and poly_handle:
                 replace_bbox = autocad_service.get_entity_bbox(poly_handle)
             deleted, errors = autocad_service.delete_entities(handles_old)
             if deleted:
@@ -1493,6 +1497,28 @@ class DigitizationPage(QWidget):
             raise RuntimeError(msg)
         bbox = (bbox[0] + dx, bbox[1] + dy, bbox[2] + dx, bbox[3] + dy)
         self._log(f"Denah ditempatkan di DWG desa: {msg}.", 90)
+
+        # Raster (gambar dasar) bisa membentang lebih dari polyline hasil
+        # deteksi. Geser raster+polyline agar pinggiran gambar tidak menyusup
+        # ke slot tempat denah berikutnya.
+        raster_bbox = autocad_service.get_entity_bbox(
+            (active_handles or {}).get("raster") or ""
+        )
+        if raster_bbox:
+            rx0, ry0 = float(raster_bbox[0]), float(raster_bbox[1])
+            adjust_x = float(slot["x"]) - rx0
+            adjust_y = float(slot["y"]) - ry0
+            if adjust_x > 1e-6 or adjust_y > 1e-6:
+                ok_adj, msg_adj = autocad_service.move_entities(
+                    active_handles, adjust_x, adjust_y
+                )
+                if not ok_adj:
+                    raise RuntimeError(msg_adj)
+                bbox = (
+                    bbox[0] + adjust_x, bbox[1] + adjust_y,
+                    bbox[2] + adjust_x, bbox[3] + adjust_y,
+                )
+                self._log(f"Posisi raster disesuaikan agar tidak menyusup: ({adjust_x:.2f}, {adjust_y:.2f}).", 91)
 
         # 6. Label 2 baris di tengah denah (pengganti blok data dokumen).
         label_line1, label_line2 = self._parcel_label_lines()

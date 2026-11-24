@@ -932,11 +932,10 @@ class AutoCADService:
         for obj in self._modelspace_entities():
             layer = str(getattr(obj, "Layer", "") or "")
             name = str(getattr(obj, "ObjectName", "") or "")
-            if layer == "AUTOLAND_BOUNDARY" and name in (
-                "AcDbPolyline",
-                "AcDb2dPolyline",
-            ):
-                bbox = self._polyline_bbox(obj)
+            # Data aktivitas diampuni: raster denah (gambar dasar) mendefinisikan
+            # sel posisi agar pinggiran gambar tidak tumpang tindih.
+            if layer == "AUTOLAND_DENAH":
+                bbox = self._entity_bbox(obj)
                 if bbox:
                     plots.append(
                         {
@@ -945,8 +944,7 @@ class AutoCADService:
                         }
                     )
                 continue
-            # Objek milik AutoLand (denah/polyline/label) tidak dihitung sebagai
-            # isi template.
+            # Objek milik AutoLand lain tidak dihitung sebagai isi template.
             if layer.startswith("AUTOLAND_"):
                 continue
             bbox = self._entity_bbox(obj)
