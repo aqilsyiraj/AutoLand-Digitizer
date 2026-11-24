@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from config import APP_NAME, APP_VERSION, APP_SUBTITLE
-from database.db import get_batch, get_all_batches
+from database.db import get_batch, get_all_batches, get_setting, set_setting
 from services.autocad_service import autocad_service
 from ui.motion.qt_motion import fade_swap, pulse
 from ui.styles.style import MAIN_STYLESHEET
@@ -204,9 +204,31 @@ class MainWindow(QMainWindow):
 
     def _initialize_data(self):
         batches = get_all_batches()
-        self.set_active_batch(batches[0]["id"] if batches else None)
+        initial_batch_id = self._last_open_batch_id(batches)
+        self.set_active_batch(initial_batch_id)
         self.switch_page(0)
         self._check_autocad()
+
+    @staticmethod
+    def _last_open_batch_id(batches):
+        """Mengembalikan batch terakhir yang dipakai, lalu fallback ke yang baru."""
+        try:
+            stored = str(get_setting("last_active_batch_id", "") or "").strip()
+        except Exception:
+            stored = ""
+        if stored:
+            for batch in batches:
+                if str(batch.get("id")) == stored:
+                    return batch["id"]
+        return batches[0]["id"] if batches else None
+
+    def set_active_batch(self, batch_id):
+        self.active_batch_id = batch_id
+        if batch_id:
+            try:
+                set_setting("last_active_batch_id", str(batch_id))
+            except Exception:
+                pass
 
     def set_active_batch(self, batch_id):
         self.active_batch_id = batch_id
