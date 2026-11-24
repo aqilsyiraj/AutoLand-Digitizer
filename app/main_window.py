@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from config import APP_NAME, APP_VERSION, APP_SUBTITLE
-from database.db import get_batch, get_all_batches, get_setting, set_setting
+from database.db import get_batch, get_all_batches, get_setting, set_setting, get_document
 from services.autocad_service import autocad_service
 from ui.motion.qt_motion import fade_swap, pulse
 from ui.styles.style import MAIN_STYLESHEET
@@ -280,10 +280,19 @@ class MainWindow(QMainWindow):
         self._check_autocad()
 
     def _on_start_digitize_doc(self, doc_id: int):
+        # Saat operator memulai dokumen (Proses), catat batch itu sebagai
+        # batch terakhir yang dikerjakan, agar reopen aplikasi mendarahnya ke
+        # dokumen yang baru di kerjakan, bukan batch terbaru yang baru dibuat.
+        doc = get_document(doc_id)
+        if doc and doc.get("batch_id"):
+            self.set_active_batch(doc["batch_id"])
         self.page_digitize.load_document(doc_id)
         self.switch_page(3)
 
     def _on_digitization_done(self, doc_id: int):
+        doc = get_document(doc_id)
+        if doc and doc.get("batch_id"):
+            self.set_active_batch(doc["batch_id"])
         self.page_queue.load_data()
         self.page_dashboard.refresh_data()
         self.page_result.load_data()
