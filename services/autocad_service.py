@@ -197,6 +197,37 @@ class AutoCADService:
             self.doc = desired
         return self.doc
 
+    def _reconnect_active_document(self):
+        """
+        Ambil handle dokumen saat ini (mungkin stale setelah open/close
+        siklus di AutoCAD), lalu aktifkan sebagai dokumen layanan.
+        """
+        try:
+            current = self.acad.ActiveDocument
+            if current is not None:
+                self.doc = current
+        except Exception:
+            pass
+        if self.doc is None and self.acad is not None:
+            try:
+                for pid in (
+                    "AutoCAD.Application.24",
+                    "AutoCAD.Application",
+                    "AutoCAD.Application.23",
+                ):
+                    try:
+                        self.acad = win32com.client.Dispatch(pid)
+                        break
+                    except Exception:
+                        continue
+                try:
+                    self.doc = self.acad.ActiveDocument
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        return self._activate_service_document()
+
     def _close_empty_drawings(self, keep_doc=None, only_startup: bool = False) -> int:
         """Tutup dokumen kosong yang tidak dipakai agar hanya satu gambar aktif."""
         if not self.acad:
@@ -577,9 +608,19 @@ class AutoCADService:
             rad = math.radians(rotation_deg)
 
             # AddRaster(ImageFileName, InsertionPoint, ScaleFactor, RotationAngle)
-            raster_obj = model_space.AddRaster(
-                abs_image, pt_variant, float(base_scale), float(rad)
-            )
+            try:
+                raster_obj = model_space.AddRaster(
+                    abs_image, pt_variant, float(base_scale), float(rad)
+                )
+            except Exception:
+                # Handle dokumen bisa stale (pesan AutoCAD: "Open.ModelSpace")
+                # setelah open/close siklus kedua ke-8; cobakan sekali lagi
+                # dengan handle ActiveDocument yang baru.
+                self._reconnect_active_document()
+                model_space = self.doc.ModelSpace
+                raster_obj = model_space.AddRaster(
+                    abs_image, pt_variant, float(base_scale), float(rad)
+                )
             if raster_obj is None:
                 return False, (
                     "AutoCAD tidak mengembalikan objek raster; gambar denah gagal disisipkan."
@@ -646,7 +687,13 @@ class AutoCADService:
                 f"ke AutoCAD ModelSpace ({image_w}×{image_h} unit, sejajar dengan polyline)."
             )
         except Exception as e:
-            return False, f"Gagal memasukkan raster image ke AutoCAD: {str(e)}"
+            doc_name = ""
+            try:
+                doc_name = self._document_name(self.doc)
+            except Exception:
+                doc_name = ""
+            suffix = f" ({doc_name})" if doc_name else ""
+            return False, f"Gagal memasukkan raster image ke AutoCAD{suffix}: {str(e)}"
 
     def ensure_raster_attached(self) -> Tuple[bool, str]:
         """
