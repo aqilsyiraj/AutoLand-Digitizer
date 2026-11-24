@@ -1228,6 +1228,50 @@ class DigitizationPage(QWidget):
             return str(candidate)
         return ""
 
+    @staticmethod
+    def _bbox_overlaps(a, b, eps=1e-6) -> bool:
+        return (
+            a[0] < b[2] - eps
+            and a[2] > b[0] + eps
+            and a[1] < b[3] - eps
+            and a[3] > b[1] + eps
+        )
+
+    def _resolve_desa_overlap(self, active_handles):
+        """
+        Jika raster baru tumpang tindih dengan raster lain di DWG desa,
+        geser seluruh raster+polyline baru ke bawah agar ada gap jelas.
+        """
+        placed_handle = str((active_handles or {}).get("raster") or "")
+        if not placed_handle:
+            return
+        placed = autocad_service.get_entity_bbox(placed_handle)
+        if not placed:
+            return
+        try:
+            layout = autocad_service.get_desa_layout()
+        except Exception:
+            return
+        mine = {str(h) for h in (active_handles or {}).values()}
+        for other in layout.get("plots", []):
+            if str(other.get("handle")) in mine:
+                continue
+            ob = other.get("bbox")
+            if not ob or not self._bbox_overlaps(placed, ob):
+                continue
+            gap = max(5.0, abs(placed[2] - placed[0]) * 0.10)
+            dy = float(ob[1]) - float(placed[3]) - gap
+            if dy >= -1e-6:
+                continue
+            ok, msg = autocad_service.move_entities(active_handles, 0.0, dy)
+            if ok:
+                self._log(
+                    f"Posisi denah disesuaikan agar tidak tumpang tindih "
+                    f"(geser {dy:.2f} vertikal).",
+                    92,
+                )
+            break
+
     def _parcel_label_lines(self) -> tuple[str, str]:
         """Label 2 baris di tengah denah: 'M. 00831' dan 'GS00013/1995'."""
         kode = str(self.doc_data.get("kode_hak") or "")
@@ -1519,6 +1563,15 @@ class DigitizationPage(QWidget):
                     bbox[2] + adjust_x, bbox[3] + adjust_y,
                 )
                 self._log(f"Posisi raster disesuaikan agar sisi kiri raster di slot: ({adjust_x:.2f}, {adjust_y:.2f}).", 91)
+
+        # 8. Jaga-jaga anti tumpang tindih: geser raster baru bila tumpang
+        # tindih denah lain di DWG desa.
+        self._resolve_desa_overlap(active_handles)
+        poly_handle_now = str((active_handles or {}).get("polyline") or "")
+        if poly_handle_now:
+            bbox_now = autocad_service.get_polyline_bbox(poly_handle_now)
+            if bbox_now:
+                bbox = bbox_now
 
         # 6. Label 2 baris di tengah denah (pengganti blok data dokumen).
         label_line1, label_line2 = self._parcel_label_lines()
