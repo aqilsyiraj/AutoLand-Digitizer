@@ -60,12 +60,12 @@ STATUS_LIST = [
 
 # Label status yang ditampilkan ke operator (kode internal tetap dipakai di database)
 STATUS_LABELS = {
-    STATUS_MENUNGGU: "Menunggu diproses",
-    STATUS_PDF_DIPROSES: "Denah dipotong",
-    STATUS_TERDETEKSI: "Polyline terdeteksi",
-    STATUS_MENUNGGU_TRACING: "Siap diproses otomatis",
-    STATUS_MENUNGGU_SCALING: "Menunggu penskalaan otomatis",
-    STATUS_MENUNGGU_VERIFIKASI: "Menunggu verifikasi",
+    STATUS_MENUNGGU: "Menunggu",
+    STATUS_PDF_DIPROSES: "Dipotong",
+    STATUS_TERDETEKSI: "Terdeteksi",
+    STATUS_MENUNGGU_TRACING: "Siap Proses",
+    STATUS_MENUNGGU_SCALING: "Skala",
+    STATUS_MENUNGGU_VERIFIKASI: "Verifikasi",
     STATUS_SELESAI: "Selesai",
     STATUS_GAGAL: "Gagal",
 }
@@ -81,6 +81,14 @@ DETECTION_MIN_AREA_RATIO = 0.005  # Luas minima kandidat terhadap luas halaman (
 DETECTION_MAX_AREA_RATIO = 0.90  # Luas maksima kandidat terhadap luas halaman (dilebarkan)
 DETECTION_EPS_FACTOR = 0.012     # Faktor penyederhanaan garis (approxPolyDP)
 COORDINATE_DIR_NAME = "koordinat"
+
+# Tata letak DWG desa: satu file per desa, denah berjajar maksimal 10 kolom
+# lalu turun ke baris berikutnya mulai dari bawah denah pertama.
+DWG_MAX_COLUMNS = 10
+DWG_PLOT_GAP_RATIO = 0.10       # jarak antar denah = 10% lebar denah
+DWG_PLOT_MIN_GAP = 5.0          # jarak minimum antar denah (satuan gambar)
+DWG_LABEL_HEIGHT_RATIO = 0.06   # tinggi huruf label = 6% tinggi denah
+DWG_LABEL_MAX_WIDTH_RATIO = 0.80  # label maksimal 80% lebar denah
 
 # Pemetaan Jenis Hak Pertanahan Indonesia
 # Kode jenis hak -> (Awalan, Label Lengkap)

@@ -80,14 +80,19 @@ backup_service.TEMPORARY_DIR = config.TEMPORARY_DIR
 
 # --- Fake COM untuk menguji kode AutoCAD asli tanpa membuka AutoCAD ----------
 class FakePolyline:
+    _next_handle = 1
+
     def __init__(self, coords):
         self.ObjectName = "AcDbPolyline"
         self.Closed = False
         self.Layer = "0"
-        self.Handle = "FAKE_POLY_1"
+        self.Handle = f"FAKE_POLY_{FakePolyline._next_handle}"
+        FakePolyline._next_handle += 1
         self._coords = [(float(x), float(y)) for x, y in coords]
         self.Area = 0.0
         self.update_count = 0
+        self.deleted = False
+        self.model_space = None
         self._recalculate()
 
     def _recalculate(self):
@@ -97,35 +102,130 @@ class FakePolyline:
             total += x1 * y2 - x2 * y1
         self.Area = abs(total) / 2.0
 
+    @property
+    def Coordinates(self):
+        flat = []
+        for x, y in self._coords:
+            flat.extend([float(x), float(y)])
+        return flat
+
+    def GetBoundingBox(self):
+        xs = [x for x, _ in self._coords]
+        ys = [y for _, y in self._coords]
+        return ((min(xs), min(ys), 0.0), (max(xs), max(ys), 0.0))
+
     def Update(self):
         self.update_count += 1
 
+    def Move(self, point1, point2):
+        dx = float(point2[0]) - float(point1[0])
+        dy = float(point2[1]) - float(point1[1])
+        self._coords = [(x + dx, y + dy) for x, y in self._coords]
+
+    def Delete(self):
+        self.deleted = True
+        if self.model_space is not None:
+            self.model_space.remove_entity(self)
+
     def ScaleEntity(self, base_point, scale_factor):
-        self._coords = [(x * scale_factor, y * scale_factor) for x, y in self._coords]
+        bx, by = float(base_point[0]), float(base_point[1])
+        factor = float(scale_factor)
+        self._coords = [
+            (bx + (x - bx) * factor, by + (y - by) * factor)
+            for x, y in self._coords
+        ]
         self._recalculate()
 
 
 class FakeRaster:
-    def __init__(self, image_path="", scale=1.0, rotation=0.0):
+    _next_handle = 1
+
+    def __init__(self, image_path="", scale=1.0, rotation=0.0, point=(0.0, 0.0, 0.0)):
+        self.ObjectName = "AcDbRasterImage"
+        self.Handle = f"FAKE_RASTER_{FakeRaster._next_handle}"
+        FakeRaster._next_handle += 1
         self.image_path = image_path
+        self.ImageFile = image_path
+        self.insert_point = (float(point[0]), float(point[1]))
         self.initial_scale = scale
         self.rotation = rotation
         self.ScaleFactor = float(scale)
+        self.ImageWidth = 100.0
+        self.ImageHeight = 100.0
         self.Layer = "0"
         self.scale_factors = []
+        self.deleted = False
+        self.model_space = None
+
+    def GetBoundingBox(self):
+        x, y = self.insert_point
+        return (
+            (x, y, 0.0),
+            (x + self.ImageWidth, y + self.ImageHeight, 0.0),
+        )
+
+    def Move(self, point1, point2):
+        dx = float(point2[0]) - float(point1[0])
+        dy = float(point2[1]) - float(point1[1])
+        self.insert_point = (self.insert_point[0] + dx, self.insert_point[1] + dy)
+
+    def Delete(self):
+        self.deleted = True
+        if self.model_space is not None:
+            self.model_space.remove_entity(self)
 
     def ScaleEntity(self, base_point, scale_factor):
+        bx, by = float(base_point[0]), float(base_point[1])
+        factor = float(scale_factor)
+        x, y = self.insert_point
+        self.insert_point = (bx + (x - bx) * factor, by + (y - by) * factor)
+        self.ImageWidth *= factor
+        self.ImageHeight *= factor
         self.scale_factors.append(scale_factor)
-        self.ScaleFactor *= float(scale_factor)
+        self.ScaleFactor *= factor
+
+    def Update(self):
+        return True
 
 
 class FakeText:
+    _next_handle = 1
+
     def __init__(self, text=""):
         self.ObjectName = "AcDbText"
+        self.Handle = f"FAKE_TEXT_{FakeText._next_handle}"
+        FakeText._next_handle += 1
         self.TextString = text
         self.Height = 3.0
         self.Layer = "0"
+        self.AttachmentPoint = 1
+        self.InsertionPoint = (0.0, 0.0, 0.0)
         self.update_count = 0
+        self.deleted = False
+        self.model_space = None
+
+    def GetBoundingBox(self):
+        lines = self.TextString.replace("\\P", "\n").split("\n")
+        width = max((len(line) for line in lines), default=1) * self.Height * 0.65
+        height = max(1, len(lines)) * self.Height * 1.25
+        x, y, _ = self.InsertionPoint
+        if int(self.AttachmentPoint) == 5:
+            return (
+                (x - width / 2, y - height / 2, 0.0),
+                (x + width / 2, y + height / 2, 0.0),
+            )
+        return ((x, y - height, 0.0), (x + width, y, 0.0))
+
+    def Move(self, point1, point2):
+        dx = float(point2[0]) - float(point1[0])
+        dy = float(point2[1]) - float(point1[1])
+        x, y, z = self.InsertionPoint
+        self.InsertionPoint = (x + dx, y + dy, z)
+
+    def Delete(self):
+        self.deleted = True
+        if self.model_space is not None:
+            self.model_space.remove_entity(self)
 
     def Update(self):
         self.update_count += 1
@@ -136,38 +236,52 @@ class FakeModelSpace(list):
         super().__init__()
         self.rasters = []
         self.polylines = []
+        self.labels = []
         self.info_blocks = []
 
-    def AddRaster(self, image_path, point, scale, rotation):
-        obj = FakeRaster(image_path, scale, rotation)
-        self.rasters.append(obj)
+    def _register(self, obj):
+        obj.model_space = self
+        self.append(obj)
         return obj
+
+    def remove_entity(self, obj):
+        if obj in self:
+            self.remove(obj)
+        for bucket in (self.rasters, self.polylines, self.labels, self.info_blocks):
+            if obj in bucket:
+                bucket.remove(obj)
+
+    def AddRaster(self, image_path, point, scale, rotation):
+        obj = FakeRaster(image_path, scale, rotation, point)
+        self.rasters.append(obj)
+        return self._register(obj)
 
     def AddLightWeightPolyline(self, variant):
         flat = [float(v) for v in variant]
         coords = list(zip(flat[0::2], flat[1::2]))
         obj = FakePolyline(coords)
         self.polylines.append(obj)
-        return obj
+        return self._register(obj)
 
     def AddText(self, text, point, height):
         obj = FakeText(text)
-        self.append(obj)
-        return obj
+        obj.InsertionPoint = point
+        obj.Height = height
+        return self._register(obj)
 
     def AddMText(self, point, width, text):
         obj = FakeText(text)
         obj.ObjectName = "AcDbMText"
         obj.InsertionPoint = point
         obj.Width = width
+        self.labels.append(obj)
         self.info_blocks.append(obj)
-        self.append(obj)
-        return obj
+        return self._register(obj)
 
     def find_by_handle(self, handle):
-        for poly in self.polylines:
-            if str(poly.Handle) == str(handle):
-                return poly
+        for obj in self:
+            if str(getattr(obj, "Handle", "")) == str(handle):
+                return obj
         return None
 
 
@@ -204,6 +318,11 @@ class FakeDocument:
         self.saved_path = path
         self.FullName = path
         Path(path).write_text("AC1032AUTOLANDTESTDWG", encoding="utf-8")
+
+    def Save(self):
+        self.saved_path = self.FullName
+        Path(self.FullName).write_text("AC1032AUTOLANDTESTDWG", encoding="utf-8")
+        return True
 
 
 class FakeDocuments:
@@ -534,34 +653,116 @@ class TestAutoLandDigitizer(unittest.TestCase):
             self.assertAlmostEqual(autocad_service.active_scale_factor, 0.1, places=6)
             self.assertEqual(rasters[0].scale_factors, [0.1])
 
-            identity = "M. 888 GS55/2001"
-            ok, msg = autocad_service.set_identity_text(identity)
-            self.assertTrue(ok, msg)
-            self.assertIn(
-                identity,
-                [obj.TextString for obj in autocad_service.doc.ModelSpace],
+            # Label 2 baris di tengah denah (pengganti blok data dokumen).
+            ok, label_handle, msg = autocad_service.add_parcel_label(
+                ["M. 00888", "GS55/2001"],
+                center=(5.0, 5.0),
+                plot_w=10.0,
+                plot_h=10.0,
             )
-
-            ok, msg = autocad_service.add_document_info_block([
-                f"Identitas: {identity}",
-                "Luas Dokumen: 100.00 m²",
-                "Desa: Sukamaju",
-            ])
             self.assertTrue(ok, msg)
-            self.assertEqual(len(autocad_service.doc.ModelSpace.info_blocks), 1)
-            self.assertIn("DATA DOKUMEN", autocad_service.doc.ModelSpace.info_blocks[0].TextString)
-            self.assertIn(identity, autocad_service.doc.ModelSpace.info_blocks[0].TextString)
-            self.assertGreater(autocad_service.doc.ModelSpace.info_blocks[0].InsertionPoint[1], 10.0)
+            self.assertTrue(label_handle)
+            label = autocad_service.doc.HandleToObject(label_handle)
+            self.assertIn("M. 00888", label.TextString)
+            self.assertIn("GS55/2001", label.TextString)
+            self.assertEqual(label.Layer, "AUTOLAND_LABEL")
+            self.assertEqual(label.AttachmentPoint, 5)
+            self.assertAlmostEqual(label.Height, 0.6, places=4)
+            self.assertEqual(len(autocad_service.doc.ModelSpace.labels), 1)
+
+            # Denah sempit: label harus diperkecil agar tidak melebihi 80% lebar.
+            ok, narrow_handle, msg = autocad_service.add_parcel_label(
+                ["M. 00888", "GS55/2001"],
+                center=(0.0, 0.0),
+                plot_w=2.0,
+                plot_h=10.0,
+            )
+            self.assertTrue(ok, msg)
+            narrow = autocad_service.doc.HandleToObject(narrow_handle)
+            self.assertLess(narrow.Height, 0.6)
+            autocad_service.delete_entities({"label": narrow_handle})
+
+            # Tata letak: denah berikutnya diletakkan di kanan denah pertama.
+            layout = autocad_service.get_desa_layout()
+            self.assertEqual(layout["plot_count"], 1)
+            self.assertGreater(layout["next_slot"]["x"], 10.0)
+            self.assertAlmostEqual(layout["next_slot"]["y"], 0.0, places=4)
+            self.assertEqual(layout["next_slot"]["row"], 0)
+            self.assertEqual(layout["next_slot"]["column"], 1)
+
+            # Geser denah + raster + label ke slot berikutnya.
+            handles = autocad_service.get_active_handles()
+            handles["label"] = label_handle
+            ok, msg = autocad_service.move_entities(handles, 20.0, 0.0)
+            self.assertTrue(ok, msg)
+            poly = autocad_service.doc.HandleToObject(handle)
+            xs = poly.Coordinates[0::2]
+            self.assertGreaterEqual(min(xs), 20.0 - 1e-6)
+
+            # Hapus objek (dipakai saat proses ulang).
+            deleted, errors = autocad_service.delete_entities(handles)
+            self.assertEqual(deleted, 3)
+            self.assertEqual(errors, [])
 
             dwg_path = TEST_ROOT / "hasil_autocad_asli.dwg"
             ok, msg = autocad_service.save_drawing_as(str(dwg_path), overwrite=True)
             self.assertTrue(ok, msg)
             self.assertTrue(dwg_path.exists())
+
+            # DWG desa: dibuat sekali, lalu dibuka ulang tanpa dokumen baru.
+            desa_path = TEST_ROOT / "Desa_Sukamaju" / "Desa_Sukamaju.dwg"
+            ok, msg, created = autocad_service.open_or_create_desa_drawing(str(desa_path))
+            self.assertTrue(ok, msg)
+            self.assertTrue(created)
+            self.assertTrue(desa_path.exists())
+            ok, msg, created_again = autocad_service.open_or_create_desa_drawing(str(desa_path))
+            self.assertTrue(ok, msg)
+            self.assertFalse(created_again)
             self.assertEqual(fake_acad.Documents.Count, 1)
         finally:
             autocad_module.to_variant_double_array = original_variant_double
             autocad_module.to_variant_point = original_variant_point
             autocad_service.connect = original_connect
+
+    # 8. TATA LETAK DWG DESA ---------------------------------------------------
+    def test_desa_layout_grid(self):
+        from services.autocad_service import AutoCADService
+
+        plots = [
+            {"handle": str(i), "bbox": (i * 12.0, 0.0, i * 12.0 + 10.0, 10.0)}
+            for i in range(10)
+        ]
+        layout = AutoCADService.compute_desa_layout(plots)
+        self.assertEqual(layout["next_slot"]["row"], 1)
+        self.assertEqual(layout["next_slot"]["column"], 0)
+        self.assertAlmostEqual(layout["next_slot"]["x"], 0.0, places=6)
+        self.assertLess(layout["next_slot"]["y"], 0.0)
+        self.assertTrue(layout["next_slot"]["starts_new_row"])
+        self.assertAlmostEqual(layout["next_slot"]["row_top"], -5.0, places=6)
+
+        second_row = {"handle": "r2", "bbox": (0.0, -20.0, 10.0, -10.0)}
+        layout2 = AutoCADService.compute_desa_layout(plots + [second_row])
+        self.assertEqual(layout2["next_slot"]["row"], 1)
+        self.assertEqual(layout2["next_slot"]["column"], 1)
+        self.assertGreater(layout2["next_slot"]["x"], 10.0)
+        self.assertFalse(layout2["next_slot"]["starts_new_row"])
+
+        # Dua baris penuh: baris ketiga kembali mulai dari kolom pertama.
+        row2 = [
+            {"handle": f"r2-{i}", "bbox": (i * 12.0, -20.0, i * 12.0 + 10.0, -10.0)}
+            for i in range(10)
+        ]
+        layout_full = AutoCADService.compute_desa_layout(plots + row2)
+        self.assertEqual(layout_full["next_slot"]["row"], 2)
+        self.assertEqual(layout_full["next_slot"]["column"], 0)
+        self.assertAlmostEqual(layout_full["next_slot"]["x"], 0.0, places=6)
+        self.assertLess(layout_full["next_slot"]["row_top"], -20.0)
+
+        layout3 = AutoCADService.compute_desa_layout(
+            [], template_bbox=(0.0, 0.0, 100.0, 50.0)
+        )
+        self.assertGreater(layout3["next_slot"]["x"], 100.0)
+        self.assertAlmostEqual(layout3["next_slot"]["y"], 0.0, places=6)
 
 
 if __name__ == "__main__":

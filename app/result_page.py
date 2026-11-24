@@ -63,15 +63,15 @@ class ResultPage(QWidget):
         intro.setSpacing(1)
         intro_tag = QLabel("ARSIP DWG")
         intro_tag.setObjectName("MicroLabel")
-        intro_title = QLabel("Berkas siap dibuka di AutoCAD")
+        intro_title = QLabel("Satu DWG desa berisi seluruh denah")
         intro_title.setObjectName("SectionTitle")
         intro.addWidget(intro_tag)
         intro.addWidget(intro_title)
         summary_layout.addLayout(intro, 1)
 
-        self.lbl_stat_total = self._stat_block(summary_layout, "Total DWG")
+        self.lbl_stat_total = self._stat_block(summary_layout, "Total denah")
         self.lbl_stat_area = self._stat_block(summary_layout, "Total luas (m²)")
-        self.lbl_stat_batch = self._stat_block(summary_layout, "Wilayah")
+        self.lbl_stat_batch = self._stat_block(summary_layout, "DWG desa")
         layout.addWidget(summary)
 
         # ---------- Pencarian ----------
@@ -103,7 +103,7 @@ class ResultPage(QWidget):
                 "Aksi",
             ]
         )
-        self.table_results.set_columns([118, 0, 136, 96, 124, 252], stretch_column=1)
+        self.table_results.set_columns([118, 0, 136, 96, 124, 312], stretch_column=1)
         self.table_results.verticalHeader().setDefaultSectionSize(44)
         self.table_results.set_empty_text(
             "Belum ada hasil digitasi. Selesaikan satu dokumen pada menu '3. PDF & Antrean'."
@@ -169,8 +169,8 @@ class ResultPage(QWidget):
         dwg_path = doc.get("path_dwg", "")
 
         btn_dwg = Button(
-            "DWG", size="xs", tone="success",
-            tooltip="Buka gambar DWG di AutoCAD",
+            "DWG Desa", size="xs", tone="success",
+            tooltip="Buka DWG desa (satu file berisi seluruh denah desa ini)",
         )
         btn_dwg.setEnabled(bool(dwg_path and os.path.exists(dwg_path)))
         btn_dwg.clicked.connect(lambda checked=False, p=dwg_path: self._open_file(p))

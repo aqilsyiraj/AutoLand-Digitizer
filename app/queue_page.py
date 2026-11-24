@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -66,6 +67,15 @@ class QueuePage(QWidget):
         )
         self.btn_import_pdf.clicked.connect(self._import_pdf_dialog)
         header.add_action(self.btn_import_pdf)
+
+        self.btn_import_folder = Button(
+            "Import Folder",
+            size="md",
+            tone="secondary",
+            tooltip="Pilih satu folder → semua PDF di dalamnya (termasuk subfolder) diimpor ke batch aktif",
+        )
+        self.btn_import_folder.clicked.connect(self._import_folder_dialog)
+        header.add_action(self.btn_import_folder)
         layout.addWidget(header)
 
         # ---------- Ringkasan batch + angka ----------
@@ -144,10 +154,11 @@ class QueuePage(QWidget):
                 "Aksi",
             ]
         )
-        self.table_queue.set_columns([44, 0, 150, 140, 132, 224], stretch_column=1)
+        self.table_queue.set_columns([44, 0, 150, 140, 132, 280], stretch_column=1)
         self.table_queue.verticalHeader().setDefaultSectionSize(44)
         self.table_queue.set_empty_text(
-            "Belum ada dokumen pada batch ini. Klik 'Import PDF' untuk menambahkan berkas."
+            "Belum ada dokumen pada batch ini. Klik 'Import PDF' atau 'Import Folder' "
+            "untuk menambahkan berkas."
         )
         layout.addWidget(self.table_queue, 1)
 
@@ -175,12 +186,15 @@ class QueuePage(QWidget):
                     f"Kec. {batch['kecamatan']} · {batch['kabupaten']}"
                 )
                 self.btn_import_pdf.setEnabled(True)
+                self.btn_import_folder.setEnabled(True)
             else:
                 self.lbl_batch_info.setText("Batch aktif tidak ditemukan.")
                 self.btn_import_pdf.setEnabled(False)
+                self.btn_import_folder.setEnabled(False)
         else:
             self.lbl_batch_info.setText("Pilih batch aktif pada menu '2. Batch / Desa'.")
             self.btn_import_pdf.setEnabled(False)
+            self.btn_import_folder.setEnabled(False)
         self.load_data()
 
     def load_data(self):
@@ -250,10 +264,10 @@ class QueuePage(QWidget):
         if completed:
             dwg_path = doc.get("path_dwg", "")
             btn_dwg = Button(
-                "DWG",
+                "DWG Desa",
                 size="xs",
                 tone="success",
-                tooltip="Buka file DWG hasil digitasi di AutoCAD",
+                tooltip="Buka DWG desa (satu file berisi seluruh denah desa ini)",
             )
             btn_dwg.setEnabled(bool(dwg_path and os.path.exists(dwg_path)))
             btn_dwg.clicked.connect(
@@ -272,7 +286,7 @@ class QueuePage(QWidget):
         else:
             btn_process = Button(
                 "Proses", size="xs", tone="primary",
-                tooltip="Deteksi polyline, periksa hasil, lalu buat DWG",
+                tooltip="Deteksi polyline, periksa hasil, lalu tambahkan denah ke DWG desa",
             )
             btn_process.clicked.connect(
                 lambda checked=False, id_=doc_id: self.start_process_doc.emit(id_)
@@ -337,6 +351,70 @@ class QueuePage(QWidget):
             "Import Selesai",
             f"{added} dokumen ditambahkan ke antrean.{skip_note}\n\n"
             "Klik 'Proses' pada baris dokumen untuk melanjutkan.",
+        )
+        self.load_data()
+
+    def _import_folder_dialog(self):
+        """Import satu folder beserta isinya — PDF diketemukan secara rekursif
+        (termasuk subfolder di dalamnya), sama seperti fitur skill `upload-folder`."""
+        if not self.active_batch_id:
+            QMessageBox.warning(self, "Belum Ada Batch", "Pilih batch aktif terlebih dahulu.")
+            return
+
+        folder = QFileDialog.getExistingDirectory(self, "Pilih Folder Dokumen", "")
+        if not folder:
+            return
+
+        root = Path(folder)
+        pdf_paths = sorted(root.rglob("*.pdf"), key=lambda p: str(p))
+        if not pdf_paths:
+            QMessageBox.information(
+                self,
+                "Tidak Ada PDF",
+                f"Tidak ditemukan file PDF (termasuk di subfolder) di:\n{folder}",
+            )
+            return
+
+        preview = "\n".join(str(p.relative_to(root)) for p in pdf_paths[:50])
+        if len(pdf_paths) > 50:
+            preview += f"\n… dan {len(pdf_paths) - 50} lagi"
+        QMessageBox.information(
+            self, "Preview Impor Folder",
+            f"{len(pdf_paths)} PDF ditemukan di folder ini:\n{preview}",
+        )
+
+        known = {
+            os.path.basename(d.get("nama_pdf", "")).lower()
+            for d in get_documents_by_batch(self.active_batch_id)
+        }
+        added = skipped = 0
+        for path in pdf_paths:
+            filename = path.name
+            if filename.lower() in known:
+                skipped += 1
+                continue
+            known.add(filename.lower())
+            dest_dir = DOKUMEN_MASUK_DIR / f"Batch_{self.active_batch_id}"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            local_path = dest_dir / filename
+            try:
+                shutil.copy2(str(path), str(local_path))
+                used_path = str(local_path)
+            except Exception:
+                used_path = str(path)
+            create_document(
+                batch_id=self.active_batch_id,
+                nama_pdf=filename,
+                path_pdf=used_path,
+                status=STATUS_MENUNGGU,
+            )
+            added += 1
+
+        QMessageBox.information(
+            self,
+            "Impor Folder Selesai",
+            f"PDF diimpor: {added}\n"
+            f"Dilewati karena nama PDF sudah ada di batch ini: {skipped}",
         )
         self.load_data()
 

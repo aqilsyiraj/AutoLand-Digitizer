@@ -131,25 +131,35 @@ def export_work_package(batch_id: int, target_zip_path: str) -> Tuple[bool, str]
         
         with zipfile.ZipFile(str(target_zip), 'w', zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("metadata.json", json.dumps(metadata, indent=2))
-            
+            written = {"pdfs": set(), "crops": set(), "dwg": set(), "coord": set()}
+
             for d in docs:
                 pdf_path = d["path_pdf"]
                 if pdf_path and os.path.exists(pdf_path):
-                    zf.write(pdf_path, arcname=f"pdfs/{os.path.basename(pdf_path)}")
+                    name = os.path.basename(pdf_path)
+                    if name not in written["pdfs"]:
+                        zf.write(pdf_path, arcname=f"pdfs/{name}")
+                        written["pdfs"].add(name)
                 crop_path = d["path_crop"]
                 if crop_path and os.path.exists(crop_path):
-                    zf.write(crop_path, arcname=f"crops/{os.path.basename(crop_path)}")
+                    name = os.path.basename(crop_path)
+                    if name not in written["crops"]:
+                        zf.write(crop_path, arcname=f"crops/{name}")
+                        written["crops"].add(name)
                 dwg_path = d["path_dwg"]
                 if dwg_path and os.path.exists(dwg_path):
-                    zf.write(dwg_path, arcname=f"dwg/{os.path.basename(dwg_path)}")
+                    name = os.path.basename(dwg_path)
+                    if name not in written["dwg"]:
+                        zf.write(dwg_path, arcname=f"dwg/{name}")
+                        written["dwg"].add(name)
 
                 for field in ("koordinat_csv", "koordinat_json"):
                     coord_path = d.get(field)
                     if coord_path and os.path.exists(coord_path):
-                        zf.write(
-                            coord_path,
-                            arcname=f"{COORDINATE_DIR_NAME}/{os.path.basename(coord_path)}",
-                        )
+                        name = os.path.basename(coord_path)
+                        if name not in written["coord"]:
+                            zf.write(coord_path, arcname=f"{COORDINATE_DIR_NAME}/{name}")
+                            written["coord"].add(name)
 
         add_log(aktivitas="Ekspor Paket", detail=f"Ekspor paket pekerjaan: {target_zip.name}", batch_id=batch_id)
         return True, str(target_zip)
@@ -235,6 +245,15 @@ def import_work_package(zip_path: str) -> Tuple[bool, str]:
                             f.write(zf.read(coord_arcname))
                         extracted_coords[field] = str(dest_coord)
 
+                handles_json = doc.get("dwg_handles_json") or ""
+                if handles_json and extracted_dwg_path:
+                    try:
+                        handles = json.loads(handles_json)
+                        handles["dwg"] = extracted_dwg_path
+                        handles_json = json.dumps(handles)
+                    except Exception:
+                        pass
+
                 imported_doc_id = create_document(
                     batch_id=new_batch_id,
                     nama_pdf=doc.get("nama_pdf", "dokumen.pdf"),
@@ -270,6 +289,7 @@ def import_work_package(zip_path: str) -> Tuple[bool, str]:
                     is_auto_detected=doc.get("is_auto_detected"),
                     detection_revision=doc.get("detection_revision"),
                     auto_detected_at=doc.get("auto_detected_at"),
+                    dwg_handles_json=handles_json or None,
                 )
                 imported_count += 1
                 

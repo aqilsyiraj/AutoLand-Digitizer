@@ -58,8 +58,8 @@ from services.detection_service import (
 )
 from services.geometry_service import analyze_scaling, verify_final_area
 from services.naming_service import (
-    format_document_identity, normalize_gs_number, sanitize_filename,
-    validate_document_input,
+    format_document_identity, get_awalan_hak, normalize_gs_number,
+    sanitize_filename, validate_document_input,
 )
 from services.pdf_service import crop_pdf_region_to_file, get_pdf_info
 from ui.components.button import Button
@@ -671,6 +671,9 @@ class DigitizationPage(QWidget):
         self.doc_data = get_document(doc_id) or {}
         if not self.doc_data:
             return
+        # Proses dokumen baru selalu dimulai dari Langkah 1 agar operator
+        # menempuh urutan 1 → 2 → 3 → 4 (tanpa acuh) — reset langkah ke 0.
+        self._set_step_enabled(0)
 
         self.batch_data = get_batch(self.doc_data.get("batch_id")) or {}
         desa = self.batch_data.get("nama_desa", "-")
@@ -1072,7 +1075,7 @@ class DigitizationPage(QWidget):
                 else "Area masuk AutoCAD: otomatis mengikuti batas polyline."
             )
         )
-        self.status_badge.set_status("MANUAL DRAW")
+        self.status_badge.set_status("Gambar Manual")
 
     def _finish_manual_draw(self):
         """Kembalikan kontrol UI setelah mode manual selesai/dibatalkan."""
@@ -1116,6 +1119,18 @@ class DigitizationPage(QWidget):
         })
         self.selected_index = manual_index
 
+        # Simpan ke DB (mirror `_accept_polyline`) agar polyline manual ketemu
+        # saat dokumen dibuka ulang nanti — juga menyu badge status TERDETEKSI konsisten.
+        save_detection_result(
+            self.doc_id,
+            self.candidates,
+            selected_index=self.selected_index,
+            crop_box=self.crop_box,
+            crop_dpi=DETECTION_CROP_DPI,
+            luas_dokumen=self.doc_data.get("luas_dokumen"),
+        )
+        self.doc_data["status"] = STATUS_TERDETEKSI
+
         self.combo_candidate.blockSignals(True)
         self.combo_candidate.addItem(
             f"Polyline Manual • {len(points)} titik (digambar operator)", manual_index
@@ -1125,6 +1140,7 @@ class DigitizationPage(QWidget):
 
         self.canvas.show_polyline(self.polyline_normalized)
         self.btn_use_polyline.setEnabled(True)
+        self.status_badge.set_status(STATUS_TERDETEKSI)
         self._set_detection_status("Polyline manual siap digunakan.", "ok")
         self._update_detection_info()
 
@@ -1212,6 +1228,23 @@ class DigitizationPage(QWidget):
             return str(candidate)
         return ""
 
+    def _parcel_label_lines(self) -> tuple[str, str]:
+        """Label 2 baris di tengah denah: 'M. 00831' dan 'GS00013/1995'."""
+        kode = str(self.doc_data.get("kode_hak") or "")
+        awalan = get_awalan_hak(kode)
+        nomor_hak = str(self.doc_data.get("nomor_hak") or "").strip()
+        if nomor_hak.isdigit():
+            nomor_hak = nomor_hak.zfill(5)
+        nomor_gs = str(self.doc_data.get("nomor_gs") or "").strip()
+        tahun = str(self.doc_data.get("tahun") or "").strip()
+        gs = normalize_gs_number(nomor_gs) if nomor_gs else ""
+        line1 = f"{awalan} {nomor_hak}".strip()
+        if gs and tahun:
+            line2 = f"{gs}/{tahun}"
+        else:
+            line2 = gs or tahun
+        return line1, line2
+
     def _ensure_autocad(self) -> bool:
         ok, msg = autocad_service.connect(launch_if_closed=True)
         if ok:
@@ -1266,6 +1299,12 @@ class DigitizationPage(QWidget):
         denah_dir.mkdir(parents=True, exist_ok=True)
 
         # 1. Potong denah resolusi tinggi dan simpan di folder hasil yang permanen.
+        method = (
+            self.candidates[self.selected_index].get("method", "opencv")
+            if self.candidates
+            else "manual"
+        )
+        self._log(f"Sumber polyline: {method}", 8)
         self._log(f"Memotong denah halaman {page} (300 DPI)…", 10)
         crop_name = f"crop_doc_{self.doc_id}_{uuid.uuid4().hex[:8]}.png"
         ok, temp_crop_path = crop_pdf_region_to_file(pdf_path, page, box, crop_name, dpi=DETECTION_CROP_DPI)
@@ -1291,7 +1330,11 @@ class DigitizationPage(QWidget):
         if area_px <= 0:
             raise RuntimeError("Luas polyline hasil deteksi tidak valid.")
         skala_m_per_px = math.sqrt(luas_doc / area_px)
-        self._log(f"Polyline {len(vertices_px)} titik • luas citra {area_px:,.0f} px²", 20)
+        self._log(
+            f"Polyline {len(vertices_px)} titik • luas citra {area_px:,.0f} px² "
+            f"• skala {skala_m_per_px:.6f} m/px",
+            20,
+        )
 
         # 3. Simpan berkas koordinat CSV + JSON
         coord_dir = batch_folder / COORDINATE_DIR_NAME
@@ -1309,22 +1352,61 @@ class DigitizationPage(QWidget):
         )
         self._log(f"Koordinat tersimpan: {Path(coord['csv']).name}", 30)
 
-        # 4. AutoCAD otomatis
+        # 4. Siapkan DWG desa (satu file per desa, denah berjajar)
         if not self._ensure_autocad():
             self._log("Proses dibatalkan oleh operator.")
             return
 
+        desa_raw = self.batch_data.get("nama_desa") or "Desa"
+        desa_file = sanitize_filename(f"Desa {desa_raw}", ".dwg")
+        desa_folder = HASIL_DIGITASI_DIR / Path(desa_file).stem
+        desa_folder.mkdir(parents=True, exist_ok=True)
+        dest = desa_folder / desa_file
+
         tpl = self._get_template_path()
-        if tpl:
-            ok, msg = autocad_service.open_template(tpl)
-            if not ok:
-                raise RuntimeError(msg)
-            self._log(f"Template dibuka: {Path(tpl).name}", 40)
-        else:
-            ok, msg = autocad_service.create_new_drawing()
-            if not ok:
-                raise RuntimeError(msg)
-            self._log("Template belum tersedia; DWG baru dibuat otomatis di AutoCAD.", 40)
+        ok, msg, created = autocad_service.open_or_create_desa_drawing(
+            str(dest), template_path=tpl
+        )
+        if not ok:
+            raise RuntimeError(msg)
+        self._log(msg, 40)
+
+        # Dokumen yang pernah diproses ke DWG desa yang sama: hapus denah lama
+        # di posisinya, lalu ganti dengan hasil terbaru.
+        handles_old = {}
+        try:
+            handles_old = json.loads(self.doc_data.get("dwg_handles_json") or "{}")
+        except Exception:
+            handles_old = {}
+        replace_bbox = None
+        if handles_old and handles_old.get("dwg") == str(dest):
+            poly_handle = str(handles_old.get("polyline") or "")
+            if poly_handle:
+                replace_bbox = autocad_service.get_entity_bbox(poly_handle)
+            deleted, errors = autocad_service.delete_entities(handles_old)
+            if deleted:
+                self._log(f"Denah lama dihapus ({deleted} objek).", 42)
+            if errors:
+                self._log("Sebagian objek lama tidak bisa dihapus: " + "; ".join(errors), 42)
+            # Bila polyline lama masih ada, jangan menimpa posisinya.
+            if replace_bbox and poly_handle:
+                if autocad_service.get_entity_bbox(poly_handle) is not None:
+                    replace_bbox = None
+
+        layout = autocad_service.get_desa_layout()
+        slot = layout.get("next_slot") or {"x": 0.0, "y": 0.0, "row": 0, "column": 0}
+        if replace_bbox:
+            slot = {
+                "x": replace_bbox[0],
+                "y": replace_bbox[1],
+                "row": int(handles_old.get("row", slot.get("row", 0))),
+                "column": int(handles_old.get("column", slot.get("column", 0))),
+            }
+        self._log(
+            f"Posisi denah: baris {int(slot.get('row', 0)) + 1}, "
+            f"kolom {int(slot.get('column', 0)) + 1}.",
+            44,
+        )
 
         ok, msg = autocad_service.insert_raster_image(crop_path, insert_pt=(0.0, 0.0, 0.0), scale=1.0)
         if not ok:
@@ -1393,58 +1475,52 @@ class DigitizationPage(QWidget):
             88,
         )
 
-        kode_hak = str(self.doc_data.get("kode_hak") or "")
-        jenis_hak = (
-            self.doc_data.get("jenis_hak")
-            or JENIS_HAK_MAP.get(kode_hak, {}).get("label", "-")
+        # 5. Geser denah (raster + polyline) ke slotnya di DWG desa.
+        bbox = autocad_service.get_polyline_bbox(handle or "")
+        if not bbox:
+            raise RuntimeError("Batas polyline tidak terbaca untuk penempatan denah.")
+        if slot.get("starts_new_row") and slot.get("row_top") is not None:
+            # Baris baru: tempelkan sisi atas denah tepat di bawah baris lama.
+            slot = {
+                **slot,
+                "y": float(slot["row_top"]) - (float(bbox[3]) - float(bbox[1])),
+            }
+        dx = float(slot["x"]) - bbox[0]
+        dy = float(slot["y"]) - bbox[1]
+        active_handles = autocad_service.get_active_handles()
+        ok, msg = autocad_service.move_entities(active_handles, dx, dy)
+        if not ok:
+            raise RuntimeError(msg)
+        bbox = (bbox[0] + dx, bbox[1] + dy, bbox[2] + dx, bbox[3] + dy)
+        self._log(f"Denah ditempatkan di DWG desa: {msg}.", 90)
+
+        # 6. Label 2 baris di tengah denah (pengganti blok data dokumen).
+        label_line1, label_line2 = self._parcel_label_lines()
+        center = ((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0)
+        ok, label_handle, msg = autocad_service.add_parcel_label(
+            [label_line1, label_line2],
+            center=center,
+            plot_w=bbox[2] - bbox[0],
+            plot_h=bbox[3] - bbox[1],
         )
-        desa = self.batch_data.get("nama_desa") or "-"
-        kecamatan = self.batch_data.get("kecamatan") or "-"
-        kabupaten = self.batch_data.get("kabupaten") or "-"
-        tanggal = self.batch_data.get("tanggal") or "-"
-        operator = self.batch_data.get("operator") or "-"
-
-        info_lines = [
-            f"Identitas: {identity}",
-            f"Jenis Hak: {jenis_hak}",
-            f"Nomor Hak: {self.doc_data.get('nomor_hak') or '-'}",
-            f"Nomor GS: {self.doc_data.get('nomor_gs') or '-'}",
-            f"Tahun: {self.doc_data.get('tahun') or '-'}",
-            f"Luas Dokumen: {luas_doc:.2f} m²",
-            f"Luas DWG Terskala: {final_area:.2f} m²",
-            f"Lokasi: Desa {desa}, Kec. {kecamatan}, Kab. {kabupaten}",
-            f"Batch: #{self.doc_data.get('batch_id', '-')} | Tanggal: {tanggal}",
-            f"Operator: {operator}",
-        ]
-
-        ok, msg = autocad_service.set_identity_text(identity)
         if not ok:
             raise RuntimeError(msg)
-        self._log("Teks identitas diperbarui otomatis.", 92)
+        self._log(f"Label denah: {label_line1} / {label_line2}", 93)
 
-        ok, msg = autocad_service.add_document_info_block(info_lines)
+        # 7. Simpan ke file DWG desa yang sama.
+        ok, msg = autocad_service.save_drawing_as(str(dest), overwrite=True)
         if not ok:
             raise RuntimeError(msg)
-        self._log(f"{msg} Denah + polyline terskala + data dokumen aktif di DWG.", 94)
+        self._log(f"DWG desa tersimpan: {dest.name}", 96)
 
-        safe_name = sanitize_filename(identity, ".dwg")
-        dest = batch_folder / safe_name
-        overwrite = False
-        if dest.exists():
-            reply = QMessageBox.question(
-                self, "Timpa File DWG",
-                f"File {safe_name} sudah ada. Timpa dengan hasil terbaru?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if reply != QMessageBox.Yes:
-                self._log("Penyimpanan dibatalkan oleh operator.")
-                return
-            overwrite = True
-
-        ok, msg = autocad_service.save_drawing_as(str(dest), overwrite=overwrite)
-        if not ok:
-            raise RuntimeError(msg)
-        self._log(f"DWG tersimpan: {dest.name}", 96)
+        handles_new = {
+            **active_handles,
+            "label": label_handle,
+            "bbox": [round(float(v), 6) for v in bbox],
+            "dwg": str(dest),
+            "row": int(slot.get("row", 0)),
+            "column": int(slot.get("column", 0)),
+        }
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         update_document(
@@ -1453,15 +1529,20 @@ class DigitizationPage(QWidget):
             status=STATUS_SELESAI,
             completed_at=now,
             is_auto_detected=1,
+            dwg_handles_json=json.dumps(handles_new),
         )
         self.doc_data.update({
             "path_dwg": str(dest), "status": STATUS_SELESAI,
             "luas_awal": initial_area, "luas_akhir": final_area,
             "faktor_scaling": faktor,
+            "dwg_handles_json": json.dumps(handles_new),
         })
         add_log(
             aktivitas="Digitasi Otomatis Selesai",
-            detail=f"{identity} | {len(vertices_px)} titik | luas {final_area:.2f} m² | {dest.name}",
+            detail=(
+                f"{identity} | {len(vertices_px)} titik | luas {final_area:.2f} m² | "
+                f"DWG desa {dest.name}"
+            ),
             batch_id=self.doc_data.get("batch_id"),
             document_id=self.doc_id,
         )
@@ -1475,10 +1556,12 @@ class DigitizationPage(QWidget):
             f"<b>{identity}</b><br><br>"
             f"• Status: SELESAI<br>"
             f"• Mode: AutoCAD Desktop ({versi})<br>"
-            f"• Isi DWG: gambar denah + polyline terskala + data dokumen<br>"
+            f"• Isi DWG: gambar denah + polyline terskala + label 2 baris<br>"
+            f"• Posisi denah: baris {int(slot.get('row', 0)) + 1}, "
+            f"kolom {int(slot.get('column', 0)) + 1}<br>"
             f"• Luas akhir: {final_area:.2f} m² (target {luas_doc:.2f} m²)<br>"
             f"• Faktor skala: {faktor:.6f}<br>"
-            f"• DWG: {dest}<br>"
+            f"• DWG desa: {dest}<br>"
             f"• Koordinat CSV: {coord['csv']}<br>"
             f"• Koordinat JSON: {coord['json']}"
         )
@@ -1486,7 +1569,9 @@ class DigitizationPage(QWidget):
         self._go_to_step(3)
         QMessageBox.information(
             self, "Digitasi Selesai",
-            f"{identity} berhasil diproses otomatis.\n\nFile DWG dan koordinat telah disimpan.",
+            f"{identity} berhasil diproses otomatis.\n\n"
+            f"Denah ditambahkan ke DWG desa:\n{dest.name}\n\n"
+            "Berkas koordinat juga telah disimpan.",
         )
 
     def _open_result_folder(self):

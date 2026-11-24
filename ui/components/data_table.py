@@ -110,9 +110,10 @@ class RowActions(QWidget):
     def __init__(self, buttons: list[Button], parent=None):
         super().__init__(parent)
         self.setObjectName("RowActions")
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(3)
+        self._layout = QHBoxLayout(self)
+        self._layout.setContentsMargins(2, 2, 2, 2)
+        self._layout.setSpacing(3)
+        self._natural_widths: list[int] = []
         for button in buttons:
             button.setParent(self)
             button.setProperty("role", "row-action")
@@ -120,8 +121,39 @@ class RowActions(QWidget):
             # Fixed mencegah tombol saling mendorong saat kolom aksi sempit.
             metrics = QFontMetrics(button.font())
             width = metrics.horizontalAdvance(button.text()) + 14
+            self._natural_widths.append(width)
             button.setFixedWidth(width)
             button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-            layout.addWidget(button)
-        layout.addStretch()
+            self._layout.addWidget(button)
+        self._layout.addStretch()
         self.buttons = buttons
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit_buttons()
+
+    def _fit_buttons(self) -> None:
+        """Perkecil tombol secara proporsional bila kolom aksi terlalu sempit."""
+        if not self.buttons or not self._natural_widths:
+            return
+        margins = self._layout.contentsMargins()
+        spacing = self._layout.spacing() * max(0, len(self.buttons) - 1)
+        available = self.width() - margins.left() - margins.right() - spacing
+        if available <= 0:
+            return
+
+        total = sum(self._natural_widths)
+        if total <= available:
+            widths = list(self._natural_widths)
+        else:
+            scale = available / total
+            widths = [max(24, int(width * scale)) for width in self._natural_widths]
+            while sum(widths) > available:
+                widest = widths.index(max(widths))
+                if widths[widest] <= 24:
+                    break
+                widths[widest] -= 1
+
+        for button, width in zip(self.buttons, widths):
+            if button.width() != width:
+                button.setFixedWidth(width)

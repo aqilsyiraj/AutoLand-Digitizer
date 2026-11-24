@@ -13,6 +13,14 @@ import time
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional, List
 
+from config import (
+    DWG_LABEL_HEIGHT_RATIO,
+    DWG_LABEL_MAX_WIDTH_RATIO,
+    DWG_MAX_COLUMNS,
+    DWG_PLOT_GAP_RATIO,
+    DWG_PLOT_MIN_GAP,
+)
+
 # Cek ketersediaan pywin32 — import dijalankan bertahap saat dibutuhkan.
 PYWIN32_AVAILABLE = False
 win32com = None
@@ -72,8 +80,11 @@ class AutoCADService:
         
         # Objek aktif hasil otomasi (tanpa perlu seleksi manual operator)
         self._active_raster_obj = None
+        self._active_raster_handle = ""
         self._active_polyline_obj = None
         self._active_polyline_handle = ""
+        self._active_label_obj = None
+        self._active_label_handle = ""
         self.active_image_size = (0, 0)
         self.active_scale_factor = 1.0
         self.active_image_path = ""
@@ -83,8 +94,11 @@ class AutoCADService:
     def _reset_active_objects(self):
         """Mengosongkan referensi objek dari dokumen AutoCAD sebelumnya."""
         self._active_raster_obj = None
+        self._active_raster_handle = ""
         self._active_polyline_obj = None
         self._active_polyline_handle = ""
+        self._active_label_obj = None
+        self._active_label_handle = ""
         self.active_image_size = (0, 0)
         self.active_scale_factor = 1.0
         self.active_image_path = ""
@@ -447,6 +461,67 @@ class AutoCADService:
                 pass
             return False, f"Gagal membuka template di AutoCAD: {str(e)}"
 
+    def open_or_create_desa_drawing(
+        self, dwg_path: str, template_path: str = ""
+    ) -> Tuple[bool, str, bool]:
+        """Membuka DWG desa yang sudah ada, atau membuatnya dari template.
+
+        Satu desa memakai satu file DWG. File baru dibuat dari template hanya
+        saat file desa belum ada; proses berikutnya membuka file yang sama lalu
+        menambahkan denah baru.
+
+        Mengembalikan: (success, message, created_new_file)
+        """
+        ok, msg = self.connect(launch_if_closed=True)
+        if not ok:
+            return False, msg, False
+
+        abs_path = os.path.abspath(dwg_path)
+        folder = os.path.dirname(abs_path)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        target_name = os.path.basename(abs_path).lower()
+
+        # Pakai dokumen yang sudah terbuka agar tidak menumpuk Drawing1/Drawing2.
+        for doc in self._documents_snapshot():
+            full = self._document_full_path(doc).lower()
+            name = self._document_name(doc).lower()
+            same_path = bool(full) and os.path.abspath(full).lower() == abs_path.lower()
+            if same_path or (name and name == target_name):
+                self.doc = doc
+                self._activate_service_document()
+                self._reset_active_objects()
+                self.acad.Visible = True
+                return True, f"DWG desa sudah terbuka: {target_name}", False
+
+        try:
+            if os.path.exists(abs_path):
+                self.doc = self.acad.Documents.Open(abs_path)
+                created = False
+                message = f"DWG desa dibuka: {target_name}"
+            elif template_path and os.path.exists(template_path):
+                ok, msg = self.open_template(template_path)
+                if not ok:
+                    return False, msg, False
+                self.doc.SaveAs(abs_path)
+                created = True
+                message = f"DWG desa dibuat dari template: {target_name}"
+            else:
+                ok, msg = self.create_new_drawing()
+                if not ok:
+                    return False, msg, False
+                self.doc.SaveAs(abs_path)
+                created = True
+                message = f"DWG desa baru dibuat: {target_name}"
+
+            self._activate_service_document()
+            self._close_empty_drawings(keep_doc=self.doc)
+            self.acad.Visible = True
+            self._reset_active_objects()
+            return True, message, created
+        except Exception as exc:
+            return False, f"Gagal membuka/membuat DWG desa: {exc}", False
+
     def insert_raster_image(
         self,
         image_path: str,
@@ -552,6 +627,7 @@ class AutoCADService:
                 pass
 
             self._active_raster_obj = raster_obj
+            self._active_raster_handle = str(getattr(raster_obj, "Handle", "") or "")
             try:
                 raster_obj.Update()
             except Exception:
@@ -677,6 +753,354 @@ class AutoCADService:
         except Exception as exc:
             return False, "", f"Gagal membuat polyline otomatis di AutoCAD: {exc}"
 
+    # ------------------------------------------------------------------
+    # Tata letak DWG desa: satu file per desa, denah berjajar 10 kolom.
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _plot_gap(width: float) -> float:
+        """Jarak antar denah: 10% lebar denah, minimal 5 satuan gambar."""
+        return max(float(DWG_PLOT_MIN_GAP), abs(float(width)) * float(DWG_PLOT_GAP_RATIO))
+
+    @staticmethod
+    def compute_desa_layout(
+        plots: List[Dict[str, Any]], template_bbox=None
+    ) -> Dict[str, Any]:
+        """Menghitung posisi denah berikutnya dari daftar polyline yang ada.
+
+        Denah disusun maksimal 10 kolom per baris. Baris berikutnya dimulai
+        dari x yang sama dengan denah pertama (turun ke bawah), bukan dari
+        kolom terakhir.
+        """
+        plots = [p for p in (plots or []) if p.get("bbox")]
+        if template_bbox:
+            tpl_w = max(1.0, float(template_bbox[2]) - float(template_bbox[0]))
+            origin_x = float(template_bbox[2]) + AutoCADService._plot_gap(tpl_w)
+            origin_y = float(template_bbox[1])
+        else:
+            origin_x = 0.0
+            origin_y = 0.0
+
+        if not plots:
+            return {
+                "plots": [],
+                "rows": [],
+                "template_bbox": template_bbox,
+                "origin": (origin_x, origin_y),
+                "next_slot": {
+                    "x": origin_x,
+                    "y": origin_y,
+                    "row": 0,
+                    "column": 0,
+                },
+                "plot_count": 0,
+            }
+
+        heights = [float(p["bbox"][3]) - float(p["bbox"][1]) for p in plots]
+        tolerance = max(1e-6, (sum(heights) / len(heights)) * 0.05)
+        rows: List[Dict[str, Any]] = []
+        for plot in plots:
+            baseline = float(plot["bbox"][1])
+            for row in rows:
+                if abs(baseline - row["baseline"]) <= tolerance:
+                    row["plots"].append(plot)
+                    break
+            else:
+                rows.append({"baseline": baseline, "plots": [plot]})
+
+        first_row = rows[0]
+        row_start_x = min(float(p["bbox"][0]) for p in first_row["plots"])
+
+        current_row = rows[-1]
+        current_plots = current_row["plots"]
+        row_index = len(rows) - 1
+        column_index = len(current_plots)
+
+        if column_index >= int(DWG_MAX_COLUMNS):
+            row_height = max(
+                float(p["bbox"][3]) - float(p["bbox"][1]) for p in current_plots
+            )
+            row_width = max(
+                float(p["bbox"][2]) - float(p["bbox"][0]) for p in current_plots
+            )
+            next_x = row_start_x
+            # Baris baru dimulai tepat di bawah baris sebelumnya. Tinggi denah
+            # baru belum diketahui di sini, jadi simpan batas atas baris dan
+            # pemanggil menyesuaikan y setelah polyline selesai diskalakan.
+            row_top = float(current_row["baseline"]) - AutoCADService._plot_gap(row_width)
+            next_y = row_top - row_height
+            starts_new_row = True
+            row_index += 1
+            column_index = 0
+        else:
+            last_right = max(float(p["bbox"][2]) for p in current_plots)
+            last_width = max(
+                float(p["bbox"][2]) - float(p["bbox"][0]) for p in current_plots
+            )
+            next_x = last_right + AutoCADService._plot_gap(last_width)
+            next_y = float(current_row["baseline"])
+            row_top = None
+            starts_new_row = False
+
+        return {
+            "plots": plots,
+            "rows": rows,
+            "template_bbox": template_bbox,
+            "origin": (row_start_x, float(first_row["baseline"])),
+            "next_slot": {
+                "x": next_x,
+                "y": next_y,
+                "row": row_index,
+                "column": column_index,
+                "starts_new_row": starts_new_row,
+                "row_top": row_top,
+            },
+            "plot_count": len(plots),
+        }
+
+    def _modelspace_entities(self) -> list:
+        try:
+            return list(self.doc.ModelSpace)
+        except Exception:
+            return []
+
+    @staticmethod
+    def _polyline_bbox(obj) -> Optional[Tuple[float, float, float, float]]:
+        try:
+            coords = list(obj.Coordinates)
+        except Exception:
+            return None
+        if len(coords) < 4:
+            return None
+        try:
+            xs = [float(v) for v in coords[0::2]]
+            ys = [float(v) for v in coords[1::2]]
+        except Exception:
+            return None
+        return (min(xs), min(ys), max(xs), max(ys))
+
+    def _entity_bbox(self, obj) -> Optional[Tuple[float, float, float, float]]:
+        try:
+            result = obj.GetBoundingBox()
+        except Exception:
+            result = None
+        if isinstance(result, (tuple, list)) and len(result) >= 2:
+            try:
+                min_pt, max_pt = result[0], result[1]
+                return (
+                    float(min_pt[0]),
+                    float(min_pt[1]),
+                    float(max_pt[0]),
+                    float(max_pt[1]),
+                )
+            except Exception:
+                pass
+        return self._polyline_bbox(obj)
+
+    def get_entity_bbox(
+        self, handle: str
+    ) -> Optional[Tuple[float, float, float, float]]:
+        try:
+            obj = self.doc.HandleToObject(str(handle))
+        except Exception:
+            return None
+        return self._entity_bbox(obj)
+
+    def get_polyline_bbox(
+        self, handle: str
+    ) -> Optional[Tuple[float, float, float, float]]:
+        try:
+            obj = self.doc.HandleToObject(str(handle))
+        except Exception:
+            return None
+        return self._polyline_bbox(obj)
+
+    def get_active_handles(self) -> Dict[str, str]:
+        """Handle objek denah yang baru dibuat (raster + polyline)."""
+        raster_handle = (
+            self._active_raster_handle
+            or str(getattr(self._active_raster_obj, "Handle", "") or "")
+        )
+        return {
+            "raster": str(raster_handle or ""),
+            "polyline": str(self._active_polyline_handle or ""),
+        }
+
+    def get_desa_layout(self) -> Dict[str, Any]:
+        """Membaca isi DWG desa lalu menghitung slot untuk denah berikutnya."""
+        plots: List[Dict[str, Any]] = []
+        template_bbox = None
+        for obj in self._modelspace_entities():
+            layer = str(getattr(obj, "Layer", "") or "")
+            name = str(getattr(obj, "ObjectName", "") or "")
+            if layer == "AUTOLAND_BOUNDARY" and name in (
+                "AcDbPolyline",
+                "AcDb2dPolyline",
+            ):
+                bbox = self._polyline_bbox(obj)
+                if bbox:
+                    plots.append(
+                        {
+                            "handle": str(getattr(obj, "Handle", "") or ""),
+                            "bbox": bbox,
+                        }
+                    )
+                continue
+            # Objek milik AutoLand (denah/polyline/label) tidak dihitung sebagai
+            # isi template.
+            if layer.startswith("AUTOLAND_"):
+                continue
+            bbox = self._entity_bbox(obj)
+            if not bbox:
+                continue
+            if template_bbox is None:
+                template_bbox = bbox
+            else:
+                template_bbox = (
+                    min(template_bbox[0], bbox[0]),
+                    min(template_bbox[1], bbox[1]),
+                    max(template_bbox[2], bbox[2]),
+                    max(template_bbox[3], bbox[3]),
+                )
+        return self.compute_desa_layout(plots, template_bbox)
+
+    def move_entities(
+        self, handles: Dict[str, Any], dx: float, dy: float
+    ) -> Tuple[bool, str]:
+        """Menggeser raster/polyline/label sejauh (dx, dy) di ModelSpace."""
+        dx = float(dx)
+        dy = float(dy)
+        if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+            return True, "Objek tidak perlu digeser."
+        if not self.doc:
+            return False, "Dokumen AutoCAD belum aktif."
+
+        moved = 0
+        for key in ("raster", "polyline", "label"):
+            handle = str((handles or {}).get(key) or "")
+            if not handle:
+                continue
+            try:
+                obj = self.doc.HandleToObject(handle)
+            except Exception as exc:
+                return False, f"Objek {key} tidak ditemukan: {exc}"
+            try:
+                obj.Move(
+                    to_variant_point(0.0, 0.0, 0.0),
+                    to_variant_point(dx, dy, 0.0),
+                )
+                moved += 1
+            except Exception as exc:
+                return False, f"Gagal menggeser objek {key}: {exc}"
+
+        try:
+            self.acad.ZoomExtents()
+        except Exception:
+            pass
+        return True, f"{moved} objek digeser ({dx:.2f}, {dy:.2f})"
+
+    def delete_entities(self, handles: Dict[str, Any]) -> Tuple[int, List[str]]:
+        """Menghapus objek denah lama saat dokumen diproses ulang."""
+        if not self.doc:
+            return 0, ["Dokumen AutoCAD belum aktif."]
+        deleted = 0
+        errors: List[str] = []
+        for key in ("label", "polyline", "raster"):
+            handle = str((handles or {}).get(key) or "")
+            if not handle:
+                continue
+            try:
+                obj = self.doc.HandleToObject(handle)
+                obj.Delete()
+                deleted += 1
+            except Exception as exc:
+                errors.append(f"{key}: {exc}")
+        try:
+            self.acad.ZoomExtents()
+        except Exception:
+            pass
+        return deleted, errors
+
+    def add_parcel_label(
+        self,
+        lines: List[str],
+        center: Tuple[float, float],
+        plot_w: float,
+        plot_h: float,
+    ) -> Tuple[bool, str, str]:
+        """Menulis label 2 baris rata tengah di dalam denah.
+
+        Tinggi huruf mengikuti 6% tinggi denah, lalu diperkecil otomatis bila
+        teks lebih lebar dari 80% denah atau dua baris tidak muat vertikal.
+        """
+        if not self.is_connected or not self.acad:
+            ok, msg = self.connect()
+            if not ok:
+                return False, "", msg
+
+        lines = [str(line) for line in (lines or []) if str(line).strip()]
+        if not lines:
+            return False, "", "Tidak ada teks label yang akan ditulis."
+
+        try:
+            self._activate_service_document()
+            plot_w = max(1e-6, float(plot_w))
+            plot_h = max(1e-6, float(plot_h))
+
+            height = plot_h * float(DWG_LABEL_HEIGHT_RATIO)
+            max_width = plot_w * float(DWG_LABEL_MAX_WIDTH_RATIO)
+            longest = max(len(line) for line in lines)
+            estimated_width = longest * height * 0.65
+            if estimated_width > max_width:
+                height *= max_width / estimated_width
+
+            # Dua baris (termasuk jarak antarbaris) harus muat di dalam denah.
+            max_height = plot_h * 0.55
+            total_height = height * len(lines) * 1.25
+            if total_height > max_height:
+                height *= max_height / total_height
+            height = max(height, 1e-4)
+
+            text = "\\P".join(self._escape_mtext(line) for line in lines)
+            try:
+                self.doc.Layers.Add("AUTOLAND_LABEL")
+            except Exception:
+                pass
+
+            label_width = max(plot_w * 0.95, 1e-6)
+            label = self.doc.ModelSpace.AddMText(
+                to_variant_point(center[0], center[1], 0.0), label_width, text
+            )
+            try:
+                label.Layer = "AUTOLAND_LABEL"
+            except Exception:
+                pass
+            try:
+                label.AttachmentPoint = 5  # acAttachmentPointMiddleCenter
+            except Exception:
+                pass
+            try:
+                label.Height = float(height)
+            except Exception:
+                pass
+            try:
+                label.InsertionPoint = to_variant_point(center[0], center[1], 0.0)
+            except Exception:
+                pass
+            try:
+                label.Update()
+            except Exception:
+                pass
+
+            self._active_label_obj = label
+            self._active_label_handle = str(getattr(label, "Handle", "") or "")
+            return (
+                True,
+                self._active_label_handle,
+                f"Label 2 baris ditulis di tengah denah (tinggi {height:.3f}).",
+            )
+        except Exception as exc:
+            return False, "", f"Gagal menulis label denah: {exc}"
+
     @staticmethod
     def _shoelace_area(points: List[Tuple[float, float]]) -> float:
         if len(points) < 3:
@@ -736,35 +1160,6 @@ class AutoCADService:
         except Exception as exc:
             return False, 0.0, f"Gagal menerapkan skala otomatis: {exc}"
 
-    def set_identity_text(self, new_identity_text: str) -> Tuple[bool, str]:
-        """
-        Mengganti teks identitas pada objek TEXT/MTEXT pertama yang ditemukan.
-        Jika tidak ada, membuat objek TEXT baru di dekat denah.
-        """
-        if not self.is_connected or not self.acad:
-            ok, msg = self.connect()
-            if not ok:
-                return False, msg
-
-        try:
-            self._activate_service_document()
-            for obj in self.doc.ModelSpace:
-                try:
-                    if getattr(obj, "ObjectName", "") in ("AcDbText", "AcDbMText"):
-                        obj.TextString = str(new_identity_text)
-                        obj.Update()
-                        return True, f"Teks identitas berhasil diubah menjadi '{new_identity_text}'."
-                except Exception:
-                    continue
-
-            text = self.doc.ModelSpace.AddText(
-                str(new_identity_text), to_variant_point(10.0, -10.0, 0.0), 2.5
-            )
-            text.Update()
-            return True, f"Teks identitas '{new_identity_text}' ditambahkan ke gambar."
-        except Exception as exc:
-            return False, f"Gagal mengubah teks identitas secara otomatis: {exc}"
-
     def get_polyline_area(self, handle: Optional[str] = None) -> Tuple[bool, float, str, str]:
         """
         Membaca luas polyline. Jika handle diberikan (alur otomatis), objek diambil
@@ -823,77 +1218,6 @@ class AutoCADService:
             .replace("}", "\\}")
         )
 
-    def add_document_info_block(
-        self,
-        lines: List[str],
-        title: str = "DATA DOKUMEN PERTANAHAN",
-    ) -> Tuple[bool, str]:
-        """
-        Menulis blok data dokumen di atas gambar denah yang telah diskalakan.
-
-        Blok ini berisi identitas, jenis hak, nomor hak/GS, tahun, luas, dan
-        informasi batch. Teks ditempatkan tepat di atas batas atas raster hasil
-        scaling sehingga denah + polyline + data dokumen tampil dalam satu DWG.
-        """
-        if not self.is_connected or not self.acad:
-            ok, msg = self.connect()
-            if not ok:
-                return False, msg
-
-        if not lines:
-            return False, "Tidak ada data dokumen yang akan ditulis."
-
-        try:
-            self._activate_service_document()
-
-            img_w = float(self.active_image_size[0]) * self.active_scale_factor
-            img_h = float(self.active_image_size[1]) * self.active_scale_factor
-            text_height = max(2.5, img_h * 0.025) if img_h > 0 else 3.0
-            width = max(img_w * 0.85, 260.0)
-            insert_x = 0.0
-
-            escaped = [self._escape_mtext(title)] + [self._escape_mtext(line) for line in lines]
-            mtext_value = "\\P".join(escaped)
-
-            # AddMText memakai titik sambung kiri-atas (top-left). Hitung tinggi
-            # perkiraan seluruh blok agar teks benar-benar berada di atas raster,
-            # bukan menimpa denah yang sudah diskalakan.
-            estimated_height = max(1, len(escaped)) * text_height * 1.25
-            gap = text_height * 1.5
-            insert_y = img_h + gap + estimated_height
-
-            try:
-                self.doc.Layers.Add("AUTOLAND_INFO")
-            except Exception:
-                pass
-
-            info = self.doc.ModelSpace.AddMText(
-                to_variant_point(insert_x, insert_y, 0.0),
-                float(width),
-                mtext_value,
-            )
-            try:
-                info.Layer = "AUTOLAND_INFO"
-            except Exception:
-                pass
-            try:
-                info.Height = float(text_height)
-            except Exception:
-                pass
-            try:
-                info.Update()
-            except Exception:
-                pass
-
-            try:
-                self.acad.ZoomExtents()
-            except Exception:
-                pass
-
-            return True, f"Blok data dokumen ({len(lines)} baris) ditulis di atas denah."
-        except Exception as exc:
-            return False, f"Gagal menulis data dokumen di AutoCAD: {exc}"
-
     def save_drawing_as(self, output_dwg_path: str, overwrite: bool = False) -> Tuple[bool, str]:
         """
         Menyimpan dokumen AutoCAD aktif sebagai file DWG hasil digitasi.
@@ -912,8 +1236,14 @@ class AutoCADService:
 
         try:
             self._activate_service_document()
-            # Simpan sebagai DWG
-            self.doc.SaveAs(abs_output)
+            current = self._document_full_path(self.doc)
+            same_file = bool(current) and os.path.abspath(current).lower() == abs_output.lower()
+            if same_file:
+                # File desa sudah terbuka: simpan di tempat agar AutoCAD tidak
+                # memunculkan dialog "file sudah ada" saat proses berikutnya.
+                self.doc.Save()
+            else:
+                self.doc.SaveAs(abs_output)
             self._last_saved_doc = self.doc
             self._last_saved_path = abs_output
             return True, f"Dokumen DWG berhasil disimpan ke: {abs_output}"

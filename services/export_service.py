@@ -365,26 +365,34 @@ def export_batch_to_zip(batch_id: int, output_filepath: Optional[str] = None) ->
             dwg_count = 0
             denah_count = 0
             coord_count = 0
+            written_dwg = set()
+            written_denah = set()
+            written_coord = set()
             for doc in docs:
                 dwg_path = doc.get("path_dwg")
                 if dwg_path and os.path.exists(dwg_path):
                     dwg_name = os.path.basename(dwg_path)
-                    zf.write(dwg_path, arcname=f"DWG/{dwg_name}")
-                    dwg_count += 1
+                    if dwg_name not in written_dwg:
+                        zf.write(dwg_path, arcname=f"DWG/{dwg_name}")
+                        written_dwg.add(dwg_name)
+                        dwg_count += 1
 
                 denah_path = doc.get("path_crop")
                 if denah_path and os.path.exists(denah_path):
-                    zf.write(
-                        denah_path,
-                        arcname=f"Gambar_Denah/{os.path.basename(denah_path)}",
-                    )
-                    denah_count += 1
+                    denah_name = os.path.basename(denah_path)
+                    if denah_name not in written_denah:
+                        zf.write(denah_path, arcname=f"Gambar_Denah/{denah_name}")
+                        written_denah.add(denah_name)
+                        denah_count += 1
 
                 for field in ("koordinat_csv", "koordinat_json"):
                     coord_path = doc.get(field)
                     if coord_path and os.path.exists(coord_path):
-                        zf.write(coord_path, arcname=f"Koordinat/{os.path.basename(coord_path)}")
-                        coord_count += 1
+                        coord_name = os.path.basename(coord_path)
+                        if coord_name not in written_coord:
+                            zf.write(coord_path, arcname=f"Koordinat/{coord_name}")
+                            written_coord.add(coord_name)
+                            coord_count += 1
 
         add_log(
             aktivitas="Ekspor ZIP",

@@ -51,6 +51,7 @@ DOCUMENT_MIGRATION_COLUMNS = {
     "auto_detected_at": "TEXT",
     "koordinat_csv": "TEXT",
     "koordinat_json": "TEXT",
+    "dwg_handles_json": "TEXT",
 }
 
 
@@ -119,7 +120,8 @@ def init_db():
             detection_revision INTEGER DEFAULT 0,
             auto_detected_at TEXT,
             koordinat_csv TEXT,
-            koordinat_json TEXT
+            koordinat_json TEXT,
+            dwg_handles_json TEXT
         );
         """)
 
@@ -310,6 +312,7 @@ DOCUMENT_UPDATABLE_FIELDS = {
     "detection_confidence", "detected_area_px", "detected_area_m2",
     "scale_m_per_px", "is_auto_detected", "detection_revision",
     "auto_detected_at", "koordinat_csv", "koordinat_json",
+    "dwg_handles_json",
 }
 
 
