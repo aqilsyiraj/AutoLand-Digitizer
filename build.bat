@@ -35,6 +35,12 @@ if exist "dist\AutoLandDigitizer" (
     mkdir "dist\AutoLandDigitizer\backup" 2>nul
     mkdir "dist\AutoLandDigitizer\logs" 2>nul
 
+    :: Template DWG harus berada di samping .exe (bukan hanya di _internal)
+    :: karena config.py saat frozen membaca BASE_DIR\template\template.dwg.
+    if exist "template" (
+        xcopy "template" "dist\AutoLandDigitizer\template" /E /I /Y >nul
+    )
+
     :: Hitung ukuran folder hasil kompilasi
     powershell -NoProfile -Command "$size = (Get-ChildItem -Path 'dist\AutoLandDigitizer' -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB; Write-Host ('[INFO] Ukuran folder hasil build: {0:N1} MB' -f $size) -ForegroundColor Green"
 )
