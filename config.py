@@ -4,7 +4,6 @@ Mengatur path direktori, konstanta sistem, pemetaan jenis hak, dan konfigurasi d
 Mendukung eksekusi mandiri (source code) dan paket terkompilasi (PyInstaller).
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -97,14 +96,6 @@ JENIS_HAK_MAP = {
     "3": {"awalan": "B.", "label": "Hak Guna Bangunan (B.)", "kode": "3"},
     "4": {"awalan": "P.", "label": "Hak Pakai (P.)", "kode": "4"},
     "8": {"awalan": "W.", "label": "Wakaf (W.)", "kode": "8"},
-}
-
-# Awalan ke Kode Hak
-AWALAN_KE_KODE = {
-    "M.": "1",
-    "B.": "3",
-    "P.": "4",
-    "W.": "8",
 }
 
 # Warna Tema UI

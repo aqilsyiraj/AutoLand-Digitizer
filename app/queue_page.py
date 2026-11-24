@@ -37,6 +37,7 @@ from ui.components.button import Button
 from ui.components.data_table import DataTable, RowActions
 from ui.components.form_field import InlineField
 from ui.components.page_header import PageHeader
+from ui.components.stat_card import stat_block
 from ui.components.status_badge import StatusBadge
 
 
@@ -96,9 +97,9 @@ class QueuePage(QWidget):
         info_box.addWidget(self.lbl_batch_info)
         summary_layout.addLayout(info_box, 1)
 
-        self.lbl_stat_total = self._stat_block(summary_layout, "Total dokumen")
-        self.lbl_stat_selesai = self._stat_block(summary_layout, "Selesai")
-        self.lbl_stat_sisa = self._stat_block(summary_layout, "Belum selesai")
+        self.lbl_stat_total = stat_block(summary_layout, "Total dokumen")
+        self.lbl_stat_selesai = stat_block(summary_layout, "Selesai")
+        self.lbl_stat_sisa = stat_block(summary_layout, "Belum selesai")
         layout.addWidget(summary)
 
         # ---------- Filter ----------
@@ -161,20 +162,6 @@ class QueuePage(QWidget):
             "untuk menambahkan berkas."
         )
         layout.addWidget(self.table_queue, 1)
-
-    @staticmethod
-    def _stat_block(parent_layout: QHBoxLayout, caption: str) -> QLabel:
-        box = QVBoxLayout()
-        box.setSpacing(0)
-        value = QLabel("0")
-        value.setObjectName("StatValue")
-        value.setStyleSheet("font-size: 20px;")
-        cap = QLabel(caption)
-        cap.setObjectName("StatSubtitle")
-        box.addWidget(value)
-        box.addWidget(cap)
-        parent_layout.addLayout(box)
-        return value
 
     def set_active_batch(self, batch_id: int):
         self.active_batch_id = batch_id

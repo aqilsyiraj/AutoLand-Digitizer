@@ -10,7 +10,6 @@ import os
 import sys
 import math
 import time
-from pathlib import Path
 from typing import Tuple, Dict, Any, Optional, List
 
 from config import (
@@ -1200,16 +1199,6 @@ class AutoCADService:
             )
         except Exception as exc:
             return False, "", f"Gagal menulis label denah: {exc}"
-
-    @staticmethod
-    def _shoelace_area(points: List[Tuple[float, float]]) -> float:
-        if len(points) < 3:
-            return 0.0
-        total = 0.0
-        for i, (x1, y1) in enumerate(points):
-            x2, y2 = points[(i + 1) % len(points)]
-            total += x1 * y2 - x2 * y1
-        return abs(total) / 2.0
 
     def scale_active_objects(
         self,

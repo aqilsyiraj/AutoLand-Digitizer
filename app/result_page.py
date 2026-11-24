@@ -20,6 +20,7 @@ from ui.components.button import Button
 from ui.components.data_table import DataTable, RowActions
 from ui.components.form_field import InlineField
 from ui.components.page_header import PageHeader
+from ui.components.stat_card import stat_block
 
 
 class ResultPage(QWidget):
@@ -69,9 +70,9 @@ class ResultPage(QWidget):
         intro.addWidget(intro_title)
         summary_layout.addLayout(intro, 1)
 
-        self.lbl_stat_total = self._stat_block(summary_layout, "Total denah")
-        self.lbl_stat_area = self._stat_block(summary_layout, "Total luas (m²)")
-        self.lbl_stat_batch = self._stat_block(summary_layout, "DWG desa")
+        self.lbl_stat_total = stat_block(summary_layout, "Total denah")
+        self.lbl_stat_area = stat_block(summary_layout, "Total luas (m²)")
+        self.lbl_stat_batch = stat_block(summary_layout, "DWG desa")
         layout.addWidget(summary)
 
         # ---------- Pencarian ----------
@@ -109,20 +110,6 @@ class ResultPage(QWidget):
             "Belum ada hasil digitasi. Selesaikan satu dokumen pada menu '3. PDF & Antrean'."
         )
         layout.addWidget(self.table_results, 1)
-
-    @staticmethod
-    def _stat_block(parent_layout: QHBoxLayout, caption: str) -> QLabel:
-        box = QVBoxLayout()
-        box.setSpacing(0)
-        value = QLabel("0")
-        value.setObjectName("StatValue")
-        value.setStyleSheet("font-size: 20px;")
-        cap = QLabel(caption)
-        cap.setObjectName("StatSubtitle")
-        box.addWidget(value)
-        box.addWidget(cap)
-        parent_layout.addLayout(box)
-        return value
 
     def load_data(self):
         query = self.input_search.text().strip()

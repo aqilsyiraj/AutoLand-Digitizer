@@ -38,12 +38,6 @@ class FormField(QWidget):
         widget.setToolTip(hint or label)
         layout.addWidget(widget)
 
-    def set_hint(self, text: str) -> None:
-        if self.hint is None:
-            return
-        self.hint.setText(text)
-        self.widget.setToolTip(text)
-
 
 class InlineField(QWidget):
     """Label + input dalam satu baris untuk filter dan pengaturan."""

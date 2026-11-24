@@ -35,7 +35,6 @@ config.ensure_directories()
 
 from config import (
     STATUS_MENUNGGU, STATUS_SELESAI, STATUS_LABELS,
-    JENIS_HAK_MAP,
 )
 from services.naming_service import (
     format_document_identity, sanitize_filename, validate_document_input,
@@ -47,7 +46,7 @@ from services.geometry_service import (
 import database.db as db
 from database.db import (
     init_db, create_batch, get_batch, update_document, get_document,
-    get_documents_by_batch, get_batch_stats, save_detection_result,
+    get_batch_stats, save_detection_result,
     get_detection_candidates,
 )
 import services.pdf_service as pdf_service
@@ -237,7 +236,6 @@ class FakeModelSpace(list):
         self.rasters = []
         self.polylines = []
         self.labels = []
-        self.info_blocks = []
 
     def _register(self, obj):
         obj.model_space = self
@@ -247,7 +245,7 @@ class FakeModelSpace(list):
     def remove_entity(self, obj):
         if obj in self:
             self.remove(obj)
-        for bucket in (self.rasters, self.polylines, self.labels, self.info_blocks):
+        for bucket in (self.rasters, self.polylines, self.labels):
             if obj in bucket:
                 bucket.remove(obj)
 
@@ -263,19 +261,12 @@ class FakeModelSpace(list):
         self.polylines.append(obj)
         return self._register(obj)
 
-    def AddText(self, text, point, height):
-        obj = FakeText(text)
-        obj.InsertionPoint = point
-        obj.Height = height
-        return self._register(obj)
-
     def AddMText(self, point, width, text):
         obj = FakeText(text)
         obj.ObjectName = "AcDbMText"
         obj.InsertionPoint = point
         obj.Width = width
         self.labels.append(obj)
-        self.info_blocks.append(obj)
         return self._register(obj)
 
     def find_by_handle(self, handle):

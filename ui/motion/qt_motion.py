@@ -9,7 +9,6 @@ dan smooth-scroll pada QScrollArea. Semua memakai QPropertyAnimation bawaan Qt.
 
 from PySide6.QtCore import (
     QEasingCurve,
-    QObject,
     QParallelAnimationGroup,
     QPropertyAnimation,
     QSequentialAnimationGroup,
@@ -20,7 +19,6 @@ __all__ = [
     "fade_in",
     "fade_swap",
     "pulse",
-    "animate_height",
     "smooth_scroll",
     "SmoothScrollArea",
     "MotionGroup",
@@ -126,17 +124,6 @@ def pulse(widget, cycles: int = 2, duration: int = 260):
     group.finished.connect(lambda: _drop_effect_when_done(widget)())
     group.start()
     return group
-
-
-def animate_height(widget, target_height: int, duration: int = 180, parent=None):
-    """Animasi tinggi widget, dipakai untuk membuka/menutup panduan."""
-    anim = QPropertyAnimation(widget, b"maximumHeight", parent or widget)
-    anim.setStartValue(max(widget.height(), 1))
-    anim.setEndValue(max(target_height, 1))
-    anim.setDuration(duration)
-    anim.setEasingCurve(QEasingCurve.OutCubic)
-    anim.start()
-    return anim
 
 
 def smooth_scroll(scroll_area, target_value: int, duration: int = 280):

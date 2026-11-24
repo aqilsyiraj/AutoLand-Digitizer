@@ -1,48 +1,15 @@
 """
 AutoLand Digitizer - PDF Service
 Ekstraksi, rendering preview, dan pemotongan (crop) denah bidang tanah resolusi tinggi dari dokumen PDF.
-Menggunakan PyMuPDF (fitz) dan Pillow.
+Menggunakan PyMuPDF (fitz).
 """
 
-import io
 import os
-from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
 
+from services.lazy_import import LazyModule
 
-class _LazyModule:
-    """Pembungkus import lambat: pustaka cuma muat saat pertama diakses."""
-
-    __slots__ = ("_name", "_fallback", "_module")
-
-    def __init__(self, name: str, fallback: str = ""):
-        object.__setattr__(self, "_name", name)
-        object.__setattr__(self, "_fallback", fallback)
-        object.__setattr__(self, "_module", None)
-
-    def _load(self):
-        module = object.__getattribute__(self, "_module")
-        if module is None:
-            name = object.__getattribute__(self, "_name")
-            module = None
-            if name == "fitz":
-                # PyMuPDF 2.x merekomendasikan nama pymupdf; fallback kompatibilitas lama.
-                try:
-                    module = __import__("pymupdf")
-                except ImportError:
-                    module = __import__("fitz")
-            else:
-                module = __import__(name)
-            object.__setattr__(self, "_module", module)
-        return module
-
-    def __getattr__(self, item):
-        return getattr(self._load(), item)
-
-
-fitz = _LazyModule("fitz")
-
-from PIL import Image  # noqa: E402  (Pillow ringan; tetap sesudah konfigurasi)
+fitz = LazyModule("fitz")
 
 from config import TEMPORARY_DIR, ensure_directories
 

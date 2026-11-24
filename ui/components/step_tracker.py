@@ -66,7 +66,3 @@ class StepTracker(QFrame):
     def mark_completed(self, step_idx: int):
         self.completed_steps.add(step_idx)
         self.set_current_step(self.current_step)
-
-    def reset(self):
-        self.completed_steps.clear()
-        self.set_current_step(0)

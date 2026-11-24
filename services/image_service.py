@@ -5,7 +5,7 @@ Pengolahan gambar hasil crop denah, rotasi 90 derajat, penyesuaian kontras untuk
 
 import os
 from PIL import Image, ImageEnhance
-from typing import Tuple, Optional
+from typing import Tuple
 
 def rotate_image(image_path: str, degrees: int) -> Tuple[bool, str]:
     """

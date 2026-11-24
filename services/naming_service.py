@@ -6,8 +6,8 @@ Contoh: M. 1342 GS1152/1998
 """
 
 import re
-from typing import Optional, Tuple
-from config import JENIS_HAK_MAP, AWALAN_KE_KODE
+from typing import Tuple
+from config import JENIS_HAK_MAP
 
 def normalize_gs_number(nomor_gs: str) -> str:
     """

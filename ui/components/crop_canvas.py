@@ -4,7 +4,7 @@ Komponen interaktif untuk memotong denah bidang tanah dari preview PDF menggunak
 Dilengkapi efek dimming semi-transparan, penanda sudut, dan konversi koordinat ternormalisasi.
 """
 
-from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame
+from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QLabel, QFrame
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPixmap, QImage, QFont
 from typing import Optional, Tuple

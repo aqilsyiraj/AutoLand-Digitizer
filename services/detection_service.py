@@ -23,34 +23,12 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from services.lazy_import import LazyModule
 
-class _LazyModule:
-    """Pembungkus import lambat: pustaka cuma muat saat pertama diakses."""
+np = LazyModule("numpy")
+fitz = LazyModule("fitz")
 
-    __slots__ = ("_name", "_module")
-
-    def __init__(self, name: str):
-        object.__setattr__(self, "_name", name)
-        object.__setattr__(self, "_module", None)
-
-    def _load(self):
-        module = object.__getattribute__(self, "_module")
-        if module is None:
-            import importlib
-
-            name = object.__getattribute__(self, "_name")
-            module = importlib.import_module(name)
-            object.__setattr__(self, "_module", module)
-        return module
-
-    def __getattr__(self, item):
-        return getattr(self._load(), item)
-
-
-np = _LazyModule("numpy")
-fitz = _LazyModule("pymupdf")
-
-cv2 = _LazyModule("cv2")
+cv2 = LazyModule("cv2")
 
 
 def _cv2_available() -> bool:
@@ -137,10 +115,6 @@ def _normalize_points(points: List[Tuple[float, float]], width: int, height: int
     return [(_clamp(x / width), _clamp(y / height)) for x, y in points]
 
 
-def _denormalize_points(points: List[Tuple[float, float]], width: int, height: int) -> List[Tuple[float, float]]:
-    return [(round(_clamp(x) * width, 2), round(_clamp(y) * height, 2)) for x, y in points]
-
-
 def _crop_box_from_points(
     points: List[Tuple[float, float]],
     image_width: int,
@@ -184,10 +158,6 @@ def _page_array_cache_put(key, value):
     _PAGE_ARRAY_CACHE.move_to_end(key)
     while len(_PAGE_ARRAY_CACHE) > 4:
         _PAGE_ARRAY_CACHE.popitem(last=False)
-
-
-def clear_page_array_cache():
-    _PAGE_ARRAY_CACHE.clear()
 
 
 def render_page_array(pdf_path: str, page_number: int, dpi: int = DETECTION_DPI) -> Tuple[Optional[np.ndarray], str]:

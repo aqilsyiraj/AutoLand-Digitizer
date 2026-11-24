@@ -6,13 +6,11 @@ Aplikasi Desktop Windows untuk Otomatisasi Digitalisasi Dokumen Pertanahan.
 import os
 import sys
 import traceback
-from pathlib import Path
 
 # Setup DPI dan atribut Qt sebelum instance QApplication
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
 from config import (

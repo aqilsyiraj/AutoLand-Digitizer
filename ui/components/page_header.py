@@ -43,10 +43,3 @@ class PageHeader(QWidget):
 
     def add_action(self, widget) -> None:
         self.actions.addWidget(widget)
-
-    def add_stretch(self) -> None:
-        self.actions.addStretch()
-
-    def set_eyebrow(self, text: str) -> None:
-        self.eyebrow_label.setText(text.upper())
-        self.eyebrow_label.setVisible(bool(text))

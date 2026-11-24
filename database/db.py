@@ -5,7 +5,6 @@ Menggunakan context manager untuk penutupan koneksi yang bersih.
 """
 
 import sqlite3
-import os
 import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional

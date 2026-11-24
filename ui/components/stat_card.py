@@ -3,6 +3,21 @@
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
 
+def stat_block(parent_layout: QHBoxLayout, caption: str) -> QLabel:
+    """Blok statistik ringkas: angka besar dengan keterangan di bawahnya."""
+    box = QVBoxLayout()
+    box.setSpacing(0)
+    value = QLabel("0")
+    value.setObjectName("StatValue")
+    value.setStyleSheet("font-size: 20px;")
+    cap = QLabel(caption)
+    cap.setObjectName("StatSubtitle")
+    box.addWidget(value)
+    box.addWidget(cap)
+    parent_layout.addLayout(box)
+    return value
+
+
 class StatCard(QFrame):
     def __init__(
         self,

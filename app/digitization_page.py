@@ -24,7 +24,7 @@ from typing import Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDoubleSpinBox, QFrame, QGridLayout,
-    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton,
+    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar,
     QStackedWidget, QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -40,7 +40,6 @@ from config import (
     STATUS_MENUNGGU_TRACING,
     STATUS_SELESAI,
     STATUS_TERDETEKSI,
-    TEMPORARY_DIR,
 )
 from database.db import (
     add_log, get_batch, get_document, get_setting, save_detection_result,
@@ -538,19 +537,6 @@ class DigitizationPage(QWidget):
 
         layout.addWidget(side, 1)
         return widget
-
-    @staticmethod
-    def _field_label(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setStyleSheet("font-size:12px;font-weight:700;color:#334155;")
-        return label
-
-    @staticmethod
-    def _small_caps(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setObjectName("IdentityEyebrow")
-        label.setText(text)
-        return label
 
     @staticmethod
     def _tone(widget, value: str):

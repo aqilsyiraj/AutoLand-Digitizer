@@ -11,15 +11,13 @@ import zipfile
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Tuple, Dict, Any, Optional
+from typing import Tuple, Optional
 
 from config import (
     DB_PATH,
     BACKUP_DIR,
-    DATA_DIR,
     DOKUMEN_MASUK_DIR,
     HASIL_DIGITASI_DIR,
-    TEMPORARY_DIR,
     COORDINATE_DIR_NAME,
     ensure_directories
 )

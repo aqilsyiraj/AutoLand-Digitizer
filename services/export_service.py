@@ -9,8 +9,7 @@ import os
 import csv
 import zipfile
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional
 
 
 class _Lazy:
