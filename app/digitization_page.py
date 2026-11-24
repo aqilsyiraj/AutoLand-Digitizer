@@ -1499,8 +1499,8 @@ class DigitizationPage(QWidget):
         self._log(f"Denah ditempatkan di DWG desa: {msg}.", 90)
 
         # Raster (gambar dasar) bisa membentang lebih dari polyline hasil
-        # deteksi. Geser raster+polyline agar pinggiran gambar tidak menyusup
-        # ke slot tempat denah berikutnya.
+        # deteksi. Geser raster+polyline agar pinggiran gambar sama dengan
+        # slot tempat denah berikutnya: sisi kiri raster tepat di slot.
         raster_bbox = autocad_service.get_entity_bbox(
             (active_handles or {}).get("raster") or ""
         )
@@ -1508,7 +1508,7 @@ class DigitizationPage(QWidget):
             rx0, ry0 = float(raster_bbox[0]), float(raster_bbox[1])
             adjust_x = float(slot["x"]) - rx0
             adjust_y = float(slot["y"]) - ry0
-            if adjust_x > 1e-6 or adjust_y > 1e-6:
+            if abs(adjust_x) > 1e-6 or abs(adjust_y) > 1e-6:
                 ok_adj, msg_adj = autocad_service.move_entities(
                     active_handles, adjust_x, adjust_y
                 )
@@ -1518,7 +1518,7 @@ class DigitizationPage(QWidget):
                     bbox[0] + adjust_x, bbox[1] + adjust_y,
                     bbox[2] + adjust_x, bbox[3] + adjust_y,
                 )
-                self._log(f"Posisi raster disesuaikan agar tidak menyusup: ({adjust_x:.2f}, {adjust_y:.2f}).", 91)
+                self._log(f"Posisi raster disesuaikan agar sisi kiri raster di slot: ({adjust_x:.2f}, {adjust_y:.2f}).", 91)
 
         # 6. Label 2 baris di tengah denah (pengganti blok data dokumen).
         label_line1, label_line2 = self._parcel_label_lines()
