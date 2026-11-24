@@ -208,7 +208,6 @@ class MainWindow(QMainWindow):
         # Di startup jangan tulis setting kembali agar "terakhir dikerjakan"
         # tidak tergeser oleh "batch terbaru yang baru dibuat".
         self.set_active_batch(initial_batch_id, persist=False)
-        self._activate_batch_ui(initial_batch_id)
         self.switch_page(0)
         self._check_autocad()
 
@@ -226,13 +225,14 @@ class MainWindow(QMainWindow):
         return batches[0]["id"] if batches else None
 
     def set_active_batch(self, batch_id, persist=True):
-        """Aktifkan batch. Jika persist=True, catat sebagai batch terakhir yang dipakai."""
+        """Aktifkan batch: pindah UI/pages serta (bila persist=True) simpan setting."""
         self.active_batch_id = batch_id
         if batch_id and persist:
             try:
                 set_setting("last_active_batch_id", str(batch_id))
             except Exception:
                 pass
+        self._activate_batch_ui(batch_id)
 
     def _activate_batch_ui(self, batch_id):
         if batch_id:
