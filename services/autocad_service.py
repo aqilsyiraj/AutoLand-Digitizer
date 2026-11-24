@@ -526,10 +526,35 @@ class AutoCADService:
                 return True, f"DWG desa sudah terbuka: {target_name}", False
 
         try:
+            opened = None
+            open_error = ""
             if os.path.exists(abs_path):
-                self.doc = self.acad.Documents.Open(abs_path)
+                # File desa sudah ada: buka dulu, lanjutkan kedudukan
+                # denah lama. Jika Documents.Open gagal, fallback buat baru.
+                try:
+                    opened = self.acad.Documents.Open(abs_path)
+                except Exception as exc:
+                    open_error = str(exc)
+
+            if opened is not None:
+                self.doc = opened
                 created = False
                 message = f"DWG desa dibuka: {target_name}"
+                if open_error:
+                    message += f" (fallback: {open_error})"
+            elif os.path.exists(abs_path):
+                # File ada tapi gagal membukanya: buat baru sebagai cadangan,
+                # agar pekerjaan tetap berlanjut daripada menemui galat saat save.
+                if template_path and os.path.exists(template_path):
+                    ok, msg = self.open_template(template_path)
+                    if ok:
+                        self.doc.SaveAs(abs_path)
+                else:
+                    ok, msg = self.create_new_drawing()
+                    if ok:
+                        self.doc.SaveAs(abs_path)
+                created = True
+                message = f"DWG desa dibuat ulang dari template/belum bisa dibuka: {target_name}"
             elif template_path and os.path.exists(template_path):
                 ok, msg = self.open_template(template_path)
                 if not ok:
