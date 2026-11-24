@@ -90,6 +90,20 @@ class AutoCADService:
         self.active_image_path = ""
         self._last_saved_doc = None
         self._last_saved_path = ""
+        self._active_desa_path = ""
+
+    def _find_desa_doc(self):
+        """Mencari dokumen desa yang terbuka berdasarkan nama path simpan."""
+        target = (getattr(self, "_active_desa_path", "") or "").lower()
+        if not target:
+            return None
+        target_name = os.path.basename(target).lower()
+        for doc in self._documents_snapshot():
+            full = self._document_full_path(doc).lower()
+            name = self._document_name(doc).lower()
+            if (full and os.path.abspath(full).lower() == target) or (name == target_name):
+                return doc
+        return None
 
     def _reset_active_objects(self):
         """Mengosongkan referensi objek dari dokumen AutoCAD sebelumnya."""
@@ -202,6 +216,19 @@ class AutoCADService:
         Ambil handle dokumen saat ini (mungkin stale setelah open/close
         siklus di AutoCAD), lalu aktifkan sebagai dokumen layanan.
         """
+        desa_doc = None
+        try:
+            desa_doc = self._find_desa_doc()
+        except Exception:
+            desa_doc = None
+        if desa_doc is not None:
+            self.doc = desa_doc
+            try:
+                desa_doc.Activate()
+            except Exception:
+                pass
+            return desa_doc
+
         try:
             current = self.acad.ActiveDocument
             if current is not None:
@@ -521,7 +548,8 @@ class AutoCADService:
             if same_path or (name and name == target_name):
                 self.doc = doc
                 self._activate_service_document()
-                self._reset_active_objects()
+                self._active_desa_path = abs_path
+                self._close_empty_drawings(keep_doc=self.doc)
                 self.acad.Visible = True
                 return True, f"DWG desa sudah terbuka: {target_name}", False
 
@@ -538,6 +566,7 @@ class AutoCADService:
 
             if opened is not None:
                 self.doc = opened
+                self._active_desa_path = abs_path
                 created = False
                 message = f"DWG desa dibuka: {target_name}"
                 if open_error:
@@ -571,6 +600,7 @@ class AutoCADService:
                 message = f"DWG desa baru dibuat: {target_name}"
 
             self._activate_service_document()
+            self._active_desa_path = abs_path
             self._close_empty_drawings(keep_doc=self.doc)
             self.acad.Visible = True
             self._reset_active_objects()
@@ -1314,6 +1344,7 @@ class AutoCADService:
                 self.doc.Save()
             else:
                 self.doc.SaveAs(abs_output)
+            self._active_desa_path = abs_output
             self._last_saved_doc = self.doc
             self._last_saved_path = abs_output
             return True, f"Dokumen DWG berhasil disimpan ke: {abs_output}"
