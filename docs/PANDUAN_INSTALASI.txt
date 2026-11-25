@@ -1,0 +1,66 @@
+AutoLand Digitizer v1.0.0 - PANDUAN SINGKAT
+=====================================================
+
+A. SEBELUM MENJALANKAN
+1. Windows 10/11 64-bit.
+2. AutoCAD Desktop 2021 (64-bit) sudah terpasang dan sudah diaktivasi.
+3. Buka AutoCAD satu kali, tunggu terbuka, lalu tutup. Ini mendaftarkan
+   COM AutoCAD.Application agar aplikasi bisa terhubung.
+4. Tidak perlu internet dan tidak perlu Python.
+
+B. CARA MENJALANKAN
+1. Ekstrak seluruh folder ini ke lokasi sederhana, misalnya:
+   D:\AutoLandDigitizer
+   Jangan jalankan langsung dari dalam file ZIP.
+2. Klik dua kali: AutoLandDigitizer.exe
+3. Jika muncul peringatan Windows SmartScreen:
+   klik "More info" lalu "Run anyway".
+   Jika antivirus menandai, tambahkan folder ini ke pengecualian.
+4. Cek indikator AutoCAD di sidebar. Jika "Tidak terhubung":
+   buka AutoCAD terlebih dahulu, lalu klik cek koneksi di aplikasi.
+
+C. FOLDER PENTING
+- data\           : database pekerjaan (autoland.db)
+- dokumen_masuk\  : PDF yang diimpor
+- temporary\      : gambar denah hasil potong
+- hasil_digitasi\ : DWG desa, rekap Excel, koordinat CSV/JSON
+- backup\         : cadangan database
+- logs\           : catatan aktivitas
+- template\       : template DWG (opsional)
+
+D. ALUR PEMAKAIAN
+1. Buat batch/desa.
+2. Import PDF (satu per satu atau Import Folder).
+3. Klik Proses, pilih halaman denah.
+4. Periksa data, atur area denah dengan "Konfirmasi Potongan".
+5. Gunakan "Titik Manual" kapan saja bila perlu koreksi.
+6. Proses otomatis -> hasil: satu file Desa_<NamaDesa>.dwg per desa.
+
+E. PENTING SAAT BERBAGI HASIL DWG
+Gambar denah di DWG adalah LINK, bukan gambar tertanam.
+Gunakan tombol "Ekspor ZIP" di aplikasi (berisi DWG + Gambar_Denah +
+Koordinat + rekap Excel), atau gunakan eTransmit di AutoCAD.
+Jangan mengirim file DWG saja tanpa folder gambar denahnya.
+
+F. MASALAH UMUM
+- "Gagal memasukkan raster / Open.ModelSpace":
+  tutup DWG kosong yang tidak dipakai, pastikan hanya satu versi AutoCAD
+  yang berjalan, lalu ulangi proses.
+- AutoCAD tidak terdeteksi:
+  pastikan AutoCAD 2021 64-bit terpasang, buka sekali, lalu jalankan ulang
+  aplikasi.
+- Data hilang setelah update:
+  backup dulu folder data\, hasil_digitasi\, dan temporary\, lalu
+  kembalikan setelah mengganti aplikasi.
+
+G. CARA UPDATE KE VERSI BARU
+1. Tutup aplikasi AutoLand Digitizer.
+2. (Disarankan) salin folder data\ dan hasil_digitasi\ ke tempat lain
+   sebagai cadangan.
+3. Jalankan installer versi baru (nama file menyebut nomor versi).
+4. Pilih folder instalasi yang SAMA seperti versi lama, lalu Install.
+   Tidak perlu uninstall versi lama.
+5. Installer hanya mengganti file program. Database, PDF masuk, log, dan
+   hasil digitasi tidak dihapus.
+6. Buka aplikasi, lalu cek nomor versi di judul jendela atau di halaman
+   Pengaturan.

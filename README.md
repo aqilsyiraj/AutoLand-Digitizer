@@ -18,13 +18,13 @@ Aplikasi berjalan **100% lokal/offline**. Deteksi batas bidang menggunakan OpenC
    Klik tombol biru **Proses** pada baris dokumen:
    - **Langkah 1 — Pilih Halaman Denah:** aplikasi otomatis memilih halaman Gambar Situasi dan menggambar polyline hijau. Anda bisa mengganti halaman, memilih kandidat, lalu **geser titik hijau** untuk koreksi. Klik 2x pada garis untuk menambah titik; klik kanan titik untuk menghapus.
    - **Langkah 2 — Periksa & Isi Data:** isi Jenis Hak, Nomor Hak, Nomor GS, Tahun, dan Luas Dokumen (m²). Nilai GS/Tahun/Luas sudah dicoba diisi otomatis dari nama file/teks PDF, tetapi **tetap periksa sendiri**.
-   - **Langkah 3 — Proses Otomatis:** tekan satu tombol. Aplikasi memotong denah 300 DPI, menyimpannya di folder `Gambar_Denah`, **memasukkan gambar denah ke DWG**, membuat polyline di atasnya, menghitung dan menerapkan skala, lalu **menulis blok data dokumen di atas denah**.
+   - **Langkah 3 — Proses Otomatis:** tekan satu tombol. Aplikasi memotong denah 300 DPI, menyimpannya di folder `Gambar_Denah`, **memasukkan gambar denah ke DWG desa**, membuat polyline di atasnya, menghitung dan menerapkan skala, lalu **menulis label 2 baris di tengah denah** (contoh `M. 00831` / `GS00013/1995`).
    - **Langkah 4 — Selesai:** ringkasan hasil dan tombol buka folder.
 
-   Isi akhir DWG di AutoCAD:
-   - gambar denah hasil potongan PDF,
+   Isi akhir DWG desa di AutoCAD:
+   - gambar denah hasil potongan PDF (raster/link),
    - polyline batas yang sudah diskalakan sesuai luas dokumen,
-   - blok teks data dokumen: identitas, jenis hak, nomor hak, nomor GS, tahun, luas dokumen, luas akhir DWG, lokasi desa/kecamatan/kabupaten, nomor batch, tanggal, dan operator.
+   - label 2 baris berisi nomor hak dan nomor GS/tahun.
 
 4. **Ekspor rekap**  
    Menu `6. Laporan & Ekspor` → pilih batch → **Ekspor Excel** / **Ekspor CSV** atau **Paket ZIP** (DWG + gambar denah + koordinat + rekap).
@@ -53,7 +53,7 @@ Antarmuka sudah dibangun ulang dengan satu sistem desain yang sama di semua hala
 
 Untuk setiap dokumen yang selesai, tersedia:
 
-- **DWG**: `hasil_digitasi/Batch_[ID]_[Desa]/[Identitas].dwg`
+- **DWG desa**: `hasil_digitasi/Desa_[NamaDesa]/Desa_[NamaDesa].dwg` — satu file per desa, denah berjajar maksimal 10 kolom ke kanan lalu turun ke baris berikutnya.
 - **Gambar denah**: `hasil_digitasi/Batch_[ID]_[Desa]/Gambar_Denah/crop_doc_[ID]_[acak].png` — dipakai sebagai raster di dalam DWG dan ikut dikirim dalam Paket ZIP.
 - **Koordinat CSV**: `hasil_digitasi/Batch_[ID]_[Desa]/koordinat/Koordinat_[Identitas].csv`
 - **Koordinat JSON**: berisi metadata deteksi, skala m/piksel, dan seluruh titik polyline.
@@ -84,13 +84,37 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Membuat executable
+### Membuat paket distribusi
+
+1. Ubah `APP_VERSION` di `config.py` (contoh `1.0.1`).
+2. Jalankan:
 
 ```cmd
 build.bat
 ```
 
-Hasil: `dist\AutoLandDigitizer\AutoLandDigitizer.exe`.
+Hasil build:
+
+- `dist\AutoLandDigitizer\AutoLandDigitizer.exe`
+- `dist\AutoLandDigitizer_Portable.zip`
+- `installer_output\AutoLandDigitizer_Installer_v<versi>.exe` (jika Inno Setup terpasang)
+
+`build.bat` membaca versi dari `config.py`, membersihkan data runtime dari folder build, menyalin `template\` dan `docs\PANDUAN_INSTALASI.txt`, lalu mengompilasi installer secara otomatis.
+
+### Update ke versi baru
+
+Di komputer pengembang:
+
+1. Naikkan `APP_VERSION` di `config.py`.
+2. Jalankan `build.bat`.
+3. Kirim file installer baru ke pengguna.
+
+Di komputer pengguna:
+
+1. Tutup aplikasi.
+2. Backup folder `data\` dan `hasil_digitasi\` bila perlu.
+3. Jalankan installer baru dan pilih folder instalasi yang sama.
+4. Tidak perlu uninstall versi lama. Installer tidak menimpa `data\`, `dokumen_masuk\`, `temporary\`, `hasil_digitasi\`, `backup\`, maupun `logs\`.
 
 ---
 

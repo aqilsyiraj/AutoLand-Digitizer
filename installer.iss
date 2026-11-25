@@ -2,7 +2,11 @@
 ; Menghasilkan installer Windows (.exe) profesional yang mandiri (offline)
 
 #define MyAppName "AutoLand Digitizer"
-#define MyAppVersion "1.0.0"
+; Versi bisa dioverride dari command line: iscc /DMyAppVersion=1.0.1 installer.iss
+; build.bat membaca config.py lalu mengirimkannya otomatis.
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "Tim Digitalisasi Pertanahan"
 #define MyAppExeName "AutoLandDigitizer.exe"
 
@@ -21,6 +25,12 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
+CloseApplications=yes
+VersionInfoVersion={#MyAppVersion}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName} Setup
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
 
 [Languages]
 Name: "indonesian"; MessagesFile: "compiler:Default.isl,installer_lang\Indonesian.isl"
@@ -30,8 +40,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Seluruh file executable dan resource hasil PyInstaller
-Source: "dist\AutoLandDigitizer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Seluruh file executable dan resource hasil PyInstaller.
+; Folder data kerja SENGAJA dikecualikan agar update tidak pernah menimpa
+; database, log, PDF masuk, atau hasil digitasi milik pengguna.
+Source: "dist\AutoLandDigitizer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "data\* dokumen_masuk\* temporary\* hasil_digitasi\* backup\* logs\*"
 ; Buat folder penyimpanan lokal
 Source: "template\*"; DestDir: "{app}\template"; Flags: ignoreversion recursesubdirs createallsubdirs
 
